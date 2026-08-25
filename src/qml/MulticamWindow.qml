@@ -18,6 +18,11 @@ Window {
     title: qsTr("Multicam")
     color: Theme.appBackground
 
+    // Phone form factor. The desktop layout puts the angle grid beside a program
+    // monitor; on a 360dp screen that split leaves both panes too small to tap.
+    // Same 640 breakpoint as SegmentationWindow.
+    readonly property bool compact: width < 640
+
     // Android hands a secondary top-level window the whole display and gives it no
     // frame, so the desktop size above would leave it laid out for a screen it does
     // not have. Asked for on show rather than bound, because show() drives visibility
@@ -81,37 +86,76 @@ Window {
         }
     }
 
-    Column {
+    // Chrome host so SafeArea attaches (a Window is not an Item). Insets only matter
+    // fullscreen on a phone; the desktop window already has a frame.
+    Item {
+        id: chrome
         anchors.fill: parent
-        anchors.margins: Theme.spacingLg
-        spacing: Theme.spacingLg
 
-        // ----- Header ------------------------------------------------------------------------
+        readonly property real topInset: Theme.touchUi ? SafeArea.margins.top : 0
+        readonly property real bottomInset: Theme.touchUi ? SafeArea.margins.bottom : 0
+        readonly property real leftInset: Theme.touchUi ? SafeArea.margins.left : 0
+        readonly property real rightInset: Theme.touchUi ? SafeArea.margins.right : 0
+        readonly property real gap: Theme.spacingLg
+
         Item {
             id: header
-            width: parent.width
-            height: Theme.controlHeight
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.leftMargin: chrome.gap + chrome.leftInset
+            anchors.rightMargin: chrome.gap + chrome.rightInset
+            anchors.topMargin: chrome.gap + chrome.topInset
+            height: headerCol.height
 
-            ThemedLabel {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Pick the camera. Cuts stay staged until you save.")
-                size: "sm"
-                tone: "muted"
+            Column {
+                id: headerCol
+                width: parent.width
+                spacing: Theme.spacingXs
+
+                Text {
+                    visible: root.compact
+                    width: parent.width
+                    text: qsTr("Multicam")
+                    color: Theme.foreground
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBase
+                    font.weight: Font.Medium
+                }
+
+                ThemedLabel {
+                    width: parent.width
+                    text: qsTr("Pick the camera. Cuts stay staged until you save.")
+                    size: "sm"
+                    tone: "muted"
+                }
             }
         }
 
         // ----- Angle grid + program monitor -------------------------------------------------
-        Row {
+        // Desktop: grid left, program right. Compact: program on top (the cut you are
+        // making), cameras underneath so the tiles stay large enough to tap.
+        Item {
             id: body
-            width: parent.width
-            height: parent.height - header.height - transport.height - footer.height - Theme.spacingLg * 3
-            spacing: Theme.spacingLg
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: header.bottom
+            anchors.bottom: transport.top
+            anchors.leftMargin: chrome.gap + chrome.leftInset
+            anchors.rightMargin: chrome.gap + chrome.rightInset
+            anchors.topMargin: chrome.gap
+            anchors.bottomMargin: chrome.gap
+
+            readonly property real programCompactH: Math.round(
+                Math.min(height * 0.36, width * 9 / 16 + 8))
 
             Item {
                 id: gridPane
-                width: (parent.width - Theme.spacingLg) * 0.62
-                height: parent.height
+                x: 0
+                y: root.compact ? programPane.height + chrome.gap : 0
+                width: root.compact ? parent.width : (parent.width - chrome.gap) * 0.62
+                height: root.compact ? parent.height - programPane.height - chrome.gap
+                                     : parent.height
 
                 // Two different situations, and they need different answers: an empty timeline
                 // can be scaffolded from the media bin in one click, but once there are clips the
@@ -137,9 +181,11 @@ Window {
                     anchors.fill: parent
                     visible: root.angles.length > 0
                     spacing: Theme.spacingMd
-                    // Keeps tiles roughly square-ish however many cameras there are: 1 wide for
-                    // one angle, 2 wide up to four, 3 wide beyond that.
-                    columns: root.angles.length <= 1 ? 1 : (root.angles.length <= 4 ? 2 : 3)
+                    // Phone never goes three-wide: a 360dp cell would be too small to tap.
+                    // Desktop keeps tiles roughly square: 1 / 2 / 3 columns by count.
+                    columns: root.compact
+                             ? (root.angles.length <= 1 ? 1 : 2)
+                             : (root.angles.length <= 1 ? 1 : (root.angles.length <= 4 ? 2 : 3))
 
                     readonly property int rowsCount: Math.max(1, Math.ceil(root.angles.length / columns))
                     readonly property real cellWidth:
@@ -165,8 +211,9 @@ Window {
                             radius: Theme.radiusMd
                             border.width: modelData.active ? 2 : Theme.borderWidth
                             border.color: modelData.active ? Theme.primary
-                                                           : (tileMouse.containsMouse ? Theme.panelForeground
-                                                                                      : Theme.panelBorder)
+                                                           : (tileMouse.containsMouse && !Theme.touchUi
+                                                              ? Theme.panelForeground
+                                                              : Theme.panelBorder)
                             clip: true
 
                             Behavior on border.color {
@@ -234,13 +281,13 @@ Window {
                             MouseArea {
                                 id: tileMouse
                                 anchors.fill: parent
-                                hoverEnabled: true
+                                hoverEnabled: !Theme.touchUi
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: EditorState.switchMulticamAngle(tile.index)
                             }
 
                             ThemedToolTip {
-                                visible: tileMouse.containsMouse
+                                visible: tileMouse.containsMouse && !Theme.touchUi
                                 text: qsTr("Switch the program to %1 (key %2)")
                                       .arg(tile.modelData.label).arg(tile.index + 1)
                             }
@@ -253,8 +300,10 @@ Window {
             // rather than composited a second time.
             Rectangle {
                 id: programPane
-                width: body.width - gridPane.width - Theme.spacingLg
-                height: parent.height
+                x: root.compact ? 0 : gridPane.width + chrome.gap
+                y: 0
+                width: root.compact ? parent.width : parent.width - gridPane.width - chrome.gap
+                height: root.compact ? body.programCompactH : parent.height
                 color: Theme.overlayColor
                 radius: Theme.radiusMd
                 border.width: Theme.borderWidth
@@ -305,8 +354,12 @@ Window {
         // ----- Transport + program lane -----------------------------------------------------
         Column {
             id: transport
-            width: parent.width
-            height: transportRow.height + laneStrip.height + Theme.spacingSm
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: footer.top
+            anchors.leftMargin: chrome.gap + chrome.leftInset
+            anchors.rightMargin: chrome.gap + chrome.rightInset
+            anchors.bottomMargin: chrome.gap
             spacing: Theme.spacingSm
 
             Row {
@@ -337,7 +390,9 @@ Window {
                 }
 
                 Text {
+                    id: timecodeLabel
                     anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.compact
                     text: root.formatTimecode(root.currentSeconds) + "  /  "
                           + root.formatTimecode(root.durationSeconds)
                     color: Theme.panelForeground
@@ -350,7 +405,8 @@ Window {
                     label: qsTr("Seek")
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.max(80, transportRow.width - Theme.iconButtonSize * 3
-                                    - 200 - Theme.spacingSm * 5)
+                                    - (root.compact ? 0 : timecodeLabel.implicitWidth)
+                                    - Theme.spacingSm * (root.compact ? 3 : 5))
                     from: 0
                     // Never a zero-width range: an empty project would make the handle jump.
                     to: Math.max(0.001, root.durationSeconds)
@@ -368,12 +424,22 @@ Window {
                 }
             }
 
+            Text {
+                visible: root.compact
+                width: parent.width
+                text: root.formatTimecode(root.currentSeconds) + "  /  "
+                      + root.formatTimecode(root.durationSeconds)
+                color: Theme.panelForeground
+                font.family: Theme.monoFontFamily
+                font.pixelSize: Theme.fontSizeSm
+            }
+
             // Staged program as one lane, so the punches are visible without going back to the
             // main timeline — which still shows the uncut stack until Save.
             Item {
                 id: laneStrip
                 width: parent.width
-                height: 22
+                height: Theme.touchUi ? 36 : 22
 
                 readonly property var programClips: EditorState.multicamProgramClips
                 readonly property real span: Math.max(0.001, root.durationSeconds)
@@ -422,12 +488,20 @@ Window {
             }
         }
 
+        // Desktop: Cancel left, saves right on one row. Compact: stacked full-width
+        // actions so three labels cannot overflow a 360dp footer.
         Item {
             id: footer
-            width: parent.width
-            height: Theme.controlHeight
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: chrome.gap + chrome.leftInset
+            anchors.rightMargin: chrome.gap + chrome.rightInset
+            anchors.bottomMargin: chrome.gap + chrome.bottomInset
+            height: root.compact ? stackedActions.height : Theme.controlHeight
 
             ThemedButton {
+                visible: !root.compact
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Cancel")
@@ -436,6 +510,7 @@ Window {
             }
 
             Row {
+                visible: !root.compact
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.spacingSm
@@ -456,6 +531,40 @@ Window {
                     onClicked: root.commitAndClose(function () {
                         EditorState.saveMulticamCombined()
                     })
+                }
+            }
+
+            Column {
+                id: stackedActions
+                visible: root.compact
+                width: parent.width
+                spacing: Theme.spacingSm
+
+                ThemedButton {
+                    width: parent.width
+                    text: qsTr("Save combined")
+                    variant: "primary"
+                    enabled: root.angles.length > 0
+                    onClicked: root.commitAndClose(function () {
+                        EditorState.saveMulticamCombined()
+                    })
+                }
+
+                ThemedButton {
+                    width: parent.width
+                    text: qsTr("Save as separate tracks")
+                    variant: "secondary"
+                    enabled: root.angles.length > 0
+                    onClicked: root.commitAndClose(function () {
+                        EditorState.saveMulticamAsSeparateTracks()
+                    })
+                }
+
+                ThemedButton {
+                    width: parent.width
+                    text: qsTr("Cancel")
+                    variant: "ghost"
+                    onClicked: root.close()
                 }
             }
         }
