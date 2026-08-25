@@ -68,3 +68,13 @@ target_compile_definitions(tst_engine PRIVATE
 add_test(NAME Engine COMMAND tst_engine)
 drift_copy_effects(tst_engine)
 drift_copy_transitions(tst_engine)
+
+# Runs lupdate and fails if i18n/*.ts would change — i.e. someone added qsTr/tr and
+# did not run `cmake --build build --target update_translations`.
+add_test(NAME Translations
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -DBINARY_DIR=${CMAKE_BINARY_DIR}
+        -DCONFIG=$<CONFIG>
+        -P ${CMAKE_SOURCE_DIR}/cmake/CheckTranslations.cmake
+)

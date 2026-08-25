@@ -12,6 +12,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 option(WITH_BGREMOVAL "Enable OpenCV-based background removal" OFF)
 
+# Defaults off under CI so the Translations test still compares the committed catalogs.
+if(DEFINED ENV{CI})
+    set(_drift_auto_ts OFF)
+else()
+    set(_drift_auto_ts ON)
+endif()
+option(DRIFT_AUTO_UPDATE_TRANSLATIONS "Run lupdate as part of the default build" ${_drift_auto_ts})
+
 # Fonts, stickers and the Whisper model used to be fetched or extracted here and shipped inside
 # the build tree — roughly 800 MB of assets every user paid for whether or not they used them.
 # They are now addons: signed .driftpkg archives downloaded at runtime into <AppDataLocation>/
@@ -61,6 +69,7 @@ set(DRIFT_UPDATE_FEED_URL "https://api.github.com/repos/CutWire-Studios/Drift/re
     CACHE STRING "Release feed polled for updates; empty disables the update check")
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Quick QuickControls2 Multimedia Test Concurrent Widgets OpenGL Network QuickEffects)
+find_package(Qt6 COMPONENTS LinguistTools QUIET)
 
 # --- Android prebuilt dependencies -------------------------------------------
 # Cross-compiling to Android has no pkg-config and no system prefix, so FFmpeg, zstd, OpenSSL and
@@ -802,6 +811,53 @@ target_compile_definitions(drift PRIVATE
     DRIFT_UPDATE_FEED_URL="${DRIFT_UPDATE_FEED_URL}"
     DRIFT_VERSION="${PROJECT_VERSION}"
 )
+
+if(Qt6LinguistTools_FOUND)
+    # Catalogs, project/SRT errors and reverse-proxy messages live on driftengine/driftcore, which
+    # qt_add_translations(drift) does not scan on its own.
+    #
+    # IMMEDIATE_CALL: Qt otherwise defers the command through cmake_language(EVAL), which splits
+    # on spaces in CMAKE_BINARY_DIR (this repo lives under "CutWire Studios").
+    file(GLOB DRIFT_TS_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/i18n/drift_*.ts")
+    qt_add_translations(drift
+        IMMEDIATE_CALL
+        SOURCE_TARGETS drift
+        TS_FILES
+            "${CMAKE_SOURCE_DIR}/i18n/drift.ts"
+            ${DRIFT_TS_FILES}
+        RESOURCE_PREFIX "/i18n"
+        SOURCES
+            src/engine/EffectCatalog.cpp
+            src/engine/EffectTemplateCatalog.cpp
+            src/engine/AudioEffectCatalog.cpp
+            src/engine/TransitionCatalog.cpp
+            src/engine/FontCatalog.cpp
+            src/engine/ReverseRenderer.cpp
+            src/engine/ProjectBundle.cpp
+            src/core/Project.cpp
+            src/core/SrtIO.cpp
+            src/core/ShapeStyle.cpp
+            src/core/TextStyle.cpp
+            src/core/SubtitleCue.cpp
+        # -locations none: source line numbers in .ts files churn on every edit
+        # and make i18n/*.ts conflict across PRs. Translators still see context
+        # and source text; they lose jump-to-source in Qt Linguist.
+        LUPDATE_OPTIONS -no-obsolete -locations none
+    )
+    if(NOT TARGET update_translations AND TARGET drift_lupdate)
+        add_custom_target(update_translations DEPENDS drift_lupdate)
+    endif()
+
+    # Qt keeps lupdate out of the default build, so a new qsTr() only reaches i18n/*.ts when
+    # someone remembers the manual target. Order it ahead of lrelease so the .qm files come from
+    # the refreshed catalogs rather than racing them. Off under CI, where the test must see the
+    # committed catalogs and not ones this build just repaired.
+    if(DRIFT_AUTO_UPDATE_TRANSLATIONS AND TARGET ${PROJECT_NAME}_lrelease AND TARGET update_translations)
+        add_dependencies(${PROJECT_NAME}_lrelease update_translations)
+    endif()
+else()
+    message(STATUS "Qt6 LinguistTools not found; translations will not be built.")
+endif()
 
 # Ship a file-based package directory next to the binaries that load the catalog.
 #

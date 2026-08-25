@@ -43,6 +43,7 @@ private slots:
     void projectPersistenceRoundTrip();
     void darkModePreferencePersistsAcrossSessions();
     void uiScalePersistsAcrossSessions();
+    void uiLanguagePersistsAcrossSessions();
     void exportFrameRatePersistsAcrossSessions();
     void lastExportSettingsNormalisesStringTypedValues();
     void textStyleBlendModeKeyframesAndEffects();
@@ -532,6 +533,48 @@ void EditorStateTest::uiScalePersistsAcrossSessions()
     qputenv("QT_SCALE_FACTOR", "3");
     AppController::applyStoredUiScale();
     QCOMPARE(qgetenv("QT_SCALE_FACTOR"), QByteArray("3"));
+}
+
+void EditorStateTest::uiLanguagePersistsAcrossSessions()
+{
+    QStandardPaths::setTestModeEnabled(true);
+    const QString org = QCoreApplication::organizationName();
+    const QString app = QCoreApplication::applicationName();
+    QCoreApplication::setOrganizationName(QStringLiteral("DriftTest"));
+    QCoreApplication::setApplicationName(QStringLiteral("DriftTest"));
+    const auto restore = qScopeGuard([&] {
+        QSettings().remove(QStringLiteral("ui/language"));
+        QCoreApplication::setOrganizationName(org);
+        QCoreApplication::setApplicationName(app);
+        QStandardPaths::setTestModeEnabled(false);
+    });
+    QSettings().remove(QStringLiteral("ui/language"));
+
+    AssetLibrary library;
+    {
+        AppController state(&library);
+        QVERIFY(state.uiLanguage().isEmpty());
+
+        const QVariantList langs = state.uiLanguages();
+        QVERIFY(langs.size() >= 2);
+        QCOMPARE(langs.at(0).toMap().value(QStringLiteral("id")).toString(), QString());
+        QCOMPARE(langs.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("en"));
+
+        QSignalSpy spy(&state, &AppController::uiLanguageChanged);
+        state.setUiLanguage(QStringLiteral("si"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(state.uiLanguage(), QStringLiteral("si"));
+        QCOMPARE(QSettings().value(QStringLiteral("ui/language")).toString(), QStringLiteral("si"));
+
+        state.setUiLanguage(QString());
+        QCOMPARE(state.uiLanguage(), QString());
+        QVERIFY(!QSettings().contains(QStringLiteral("ui/language")));
+
+        state.setUiLanguage(QStringLiteral("si"));
+    }
+
+    AppController relaunched(&library);
+    QCOMPARE(relaunched.uiLanguage(), QStringLiteral("si"));
 }
 
 void EditorStateTest::exportFrameRatePersistsAcrossSessions()

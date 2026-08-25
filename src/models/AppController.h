@@ -65,6 +65,10 @@ class AppController : public QObject
     Q_PROPERTY(bool autoKeyEnabled READ autoKeyEnabled WRITE setAutoKeyEnabled NOTIFY autoKeyEnabledChanged)
     // Opt-in: on launch, restore the last open project (saved .drift or unsaved recovery snapshot).
     Q_PROPERTY(bool reopenLastProject READ reopenLastProject WRITE setReopenLastProject NOTIFY reopenLastProjectChanged)
+    // App-wide interface language, QSettings("ui/language"). Empty means follow the OS locale.
+    // "en" is the source catalog (no .qm). Other codes match i18n/drift_<code>.qm.
+    Q_PROPERTY(QString uiLanguage READ uiLanguage WRITE setUiLanguage NOTIFY uiLanguageChanged)
+    Q_PROPERTY(QVariantList uiLanguages READ uiLanguages NOTIFY uiLanguageChanged)
     // Extra UI scale on top of the OS display scale. QSettings("ui/scale"), 1.0..2.0 in
     // 0.25 steps. Applied as QT_SCALE_FACTOR before QApplication; a change needs a restart.
     Q_PROPERTY(double uiScale READ uiScale WRITE setUiScale NOTIFY uiScaleChanged)
@@ -216,6 +220,8 @@ public:
     bool mediaGridMode() const { return m_mediaGridMode; }
     bool autoKeyEnabled() const { return m_autoKeyEnabled; }
     bool reopenLastProject() const { return m_reopenLastProject; }
+    QString uiLanguage() const { return m_uiLanguage; }
+    QVariantList uiLanguages() const;
     double uiScale() const { return m_uiScale; }
     double appliedUiScale() const;
     bool uiScaleNeedsRestart() const;
@@ -294,10 +300,14 @@ public:
     void setMediaGridMode(bool enabled);
     void setAutoKeyEnabled(bool enabled);
     void setReopenLastProject(bool enabled);
+    void setUiLanguage(const QString &language);
     void setUiScale(double scale);
     static double storedUiScale();
     // Writes QT_SCALE_FACTOR from ui/scale unless the environment already set one.
     static void applyStoredUiScale();
+    // Installs the .qm for ui/language (or the system locale). Call once after QApplication
+    // is named, and again from setUiLanguage. Safe before any AppController exists.
+    static void installUiTranslators();
     // Strip chip click — folds `prop`'s curve away, or brings it back. Purely a view filter: the
     // chip stays put either way, and the animation keeps playing while it is hidden.
     Q_INVOKABLE void toggleKeyframeGraphPropertyVisible(const QString &prop);
@@ -863,6 +873,7 @@ signals:
     void mediaGridModeChanged();
     void autoKeyEnabledChanged();
     void reopenLastProjectChanged();
+    void uiLanguageChanged();
     void uiScaleChanged();
     void keyframeGraphVisibilityChanged();
     void subtitleEditingChanged();
@@ -1106,6 +1117,7 @@ protected:
     bool m_mediaGridMode = true;
     bool m_autoKeyEnabled = false;
     bool m_reopenLastProject = false;
+    QString m_uiLanguage;
     double m_uiScale = 1.0;
     bool m_loopWorkAreaEnabled = false;
     QStringList m_keyframeGraphHiddenProperties;
