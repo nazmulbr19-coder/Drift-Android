@@ -390,6 +390,7 @@ QtObject {
     readonly property var icons: ({
         scissors: "scissors",
         chevronsLeft: "chevrons-left",
+        chevronsRightLeft: "chevrons-right-left",
         undo: "undo",
         redo: "redo",
         clipboardPaste: "clipboard-paste",

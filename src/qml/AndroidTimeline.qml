@@ -808,6 +808,24 @@ Item {
         return -1
     }
 
+    // Empty stretches on a track, sorted left-to-right. Gaps are never stored —
+    // they are whatever time is not covered by a clip.
+    function gapsForTrack(trackIndex) {
+        if (trackIndex < 0 || trackIndex >= tracks.length)
+            return []
+        const sorted = tracks[trackIndex].clips.slice().sort(function (a, b) {
+            return a.start - b.start
+        })
+        const gaps = []
+        for (var i = 0; i < sorted.length - 1; i++) {
+            const gapStart = sorted[i].start + sorted[i].duration
+            const gapEnd = sorted[i + 1].start
+            if (gapEnd > gapStart)
+                gaps.push({ start: gapStart, end: gapEnd })
+        }
+        return gaps
+    }
+
     function trackIndexAtY(y) {
         var cursor = 0
         for (var i = 0; i < tracks.length; i++) {
@@ -1360,6 +1378,44 @@ Item {
                                         timelineColumn: trackColumn
                                         trackIndex: trackRow.trackIndex
                                         touchMode: true
+                                    }
+                                }
+
+                                // Long-press a gap to ripple everything after it left.
+                                Repeater {
+                                    model: root.gapsForTrack(trackRow.trackIndex)
+                                    delegate: Item {
+                                        id: gapItem
+                                        required property var modelData
+                                        x: modelData.start * root.pxPerSecond
+                                        width: Math.max(Theme.androidClipEdgeMargin,
+                                                        (modelData.end - modelData.start) * root.pxPerSecond)
+                                        height: trackRow.height
+                                        z: 1
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            visible: gapPress.pressed
+                                            color: Qt.rgba(Theme.panelAccent.r, Theme.panelAccent.g,
+                                                           Theme.panelAccent.b, 0.35)
+                                        }
+
+                                        MouseArea {
+                                            id: gapPress
+                                            anchors.fill: parent
+                                            pressAndHoldInterval: 400
+                                            onPressAndHold: gapContextMenu.popup()
+
+                                            ThemedContextMenu {
+                                                id: gapContextMenu
+                                                ThemedMenuItem {
+                                                    text: qsTr("Close gap")
+                                                    icon.name: Theme.icons.chevronsRightLeft
+                                                    onTriggered: EditorState.closeGap(trackRow.trackIndex,
+                                                                                      gapItem.modelData.start)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 

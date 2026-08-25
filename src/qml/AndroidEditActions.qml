@@ -135,6 +135,19 @@ Item {
             }
 
             ActionButton {
+                glyph: Theme.icons.chevronsRightLeft
+                tooltip: qsTr("Close gap after clip")
+                enabled: root.hasSelection
+                onClicked: {
+                    const clip = EditorState.clipAt(EditorState.selectedTrack,
+                                                    EditorState.selectedClip)
+                    if (clip && clip.start !== undefined)
+                        EditorState.closeGap(EditorState.selectedTrack,
+                                             clip.start + clip.duration)
+                }
+            }
+
+            ActionButton {
                 glyph: Theme.icons.snowflake
                 tooltip: qsTr("Freeze frame at current time")
                 onClicked: EditorState.freezeFrameAtPlayhead()
