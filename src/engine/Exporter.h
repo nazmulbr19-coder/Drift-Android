@@ -44,6 +44,7 @@ struct ExportSettings
     QString audioCodecId = QStringLiteral("aac");
     int audioBitrateKbps = 192;
     bool audioOnly = false;
+    bool gifExport = false;
     // Inclusive start / exclusive end of the range to encode. Both 0 means the full timeline.
     drift::TimeUs startUs = 0;
     drift::TimeUs endUs = 0;
@@ -82,6 +83,8 @@ public:
 
     // Frame rate choices for the export dialog; the first entry follows `projectFps`.
     static QVariantList frameRateOptions(int projectFps);
+
+    static bool gifAvailable();
 
     static ExportSettings defaultSettings();
     static ExportSettings settingsFromMap(const QVariantMap &map);

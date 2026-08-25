@@ -11778,6 +11778,11 @@ QVariantList AppController::exportAudioCodecs() const
     return Exporter::audioCodecs();
 }
 
+bool AppController::exportGifAvailable() const
+{
+    return Exporter::gifAvailable();
+}
+
 QVariantMap AppController::exportDefaultSettings() const
 {
     const ExportSettings s = Exporter::defaultSettings();
@@ -11793,6 +11798,7 @@ QVariantMap AppController::exportDefaultSettings() const
         {QStringLiteral("audioCodecId"), s.audioCodecId},
         {QStringLiteral("audioBitrateKbps"), s.audioBitrateKbps},
         {QStringLiteral("audioOnly"), s.audioOnly},
+        {QStringLiteral("gifExport"), s.gifExport},
     };
 }
 
@@ -11835,6 +11841,7 @@ QVariantMap AppController::lastExportSettings() const
     takeString(QStringLiteral("audioCodecId"));
     takeInt(QStringLiteral("audioBitrateKbps"));
     takeBool(QStringLiteral("audioOnly"));
+    takeBool(QStringLiteral("gifExport"));
     takeBool(QStringLiteral("exportWorkAreaOnly"));
     return out;
 }
@@ -11872,6 +11879,7 @@ void AppController::rememberExportChoice(const QString &outputPath, const QVaria
     put(QStringLiteral("audioCodecId"));
     put(QStringLiteral("audioBitrateKbps"));
     put(QStringLiteral("audioOnly"));
+    put(QStringLiteral("gifExport"));
     put(QStringLiteral("exportWorkAreaOnly"));
     store.endGroup();
 }
@@ -11978,9 +11986,11 @@ void AppController::exportWithSettings(const QUrl &outputUrl, const QVariantMap 
     // The muxer is chosen from the output file's extension, and a created document's URI has
     // none — so the staging file the encoder writes is given the one the settings imply.
     const QString container =
-        exportSettings.audioOnly
-            ? Exporter::preferredAudioOnlyContainer(exportSettings.audioCodecId)
-            : Exporter::preferredContainer(exportSettings.videoCodecId, exportSettings.audioCodecId);
+        exportSettings.gifExport
+            ? QStringLiteral("gif")
+            : exportSettings.audioOnly
+                  ? Exporter::preferredAudioOnlyContainer(exportSettings.audioCodecId)
+                  : Exporter::preferredContainer(exportSettings.videoCodecId, exportSettings.audioCodecId);
     const QString outputPath =
         writeTargetPath(outputUrl, Exporter::defaultSuffix(container, exportSettings.audioOnly));
     if (outputPath.isEmpty()) {
