@@ -151,6 +151,9 @@ ApplicationWindow {
         function onOpenSegmentationWindowRequested(track, clip, startSeconds, durationSeconds) {
             segmentationWindow.openFor(track, clip, startSeconds, durationSeconds, true)
         }
+        function onOpenMulticamWindowRequested() {
+            multicamWindow.openSession()
+        }
     }
 
     DenoiseWindow {
@@ -163,6 +166,10 @@ ApplicationWindow {
 
     FadeCurveWindow {
         id: fadeCurveWindow
+    }
+
+    MulticamWindow {
+        id: multicamWindow
     }
 
     // Opened from the clip inspector; a window rather than a dialog so the timeline stays visible.
@@ -180,6 +187,10 @@ ApplicationWindow {
 
     function openFadeCurve(track, clip) {
         fadeCurveWindow.openFor(track, clip)
+    }
+
+    function openMulticam() {
+        multicamWindow.openSession()
     }
 
     // Opened from the header, and from every empty state that a missing addon causes.

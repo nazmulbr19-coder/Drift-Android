@@ -83,6 +83,10 @@ private slots:
     void clipAnimationSerializationAndSample();
     void rebaseClipLayoutFreezesImplicitSize();
     void rebaseClipLayoutShiftsKeyframedPosition();
+    void applyMulticamSwitchPunchesAndRecuts();
+    void applyMulticamSwitchMergesAdjacentSameCamera();
+    void applyMulticamSwitchRejectsEdges();
+    void sliceClipToTimelineRangeKeepsSourceInSync();
 };
 
 void CoreTest::timeConversion()
@@ -2317,6 +2321,127 @@ void CoreTest::rebaseClipLayoutShiftsKeyframedPosition()
     QCOMPARE(out.transformX.evaluateAt(0), -120.0);
     QCOMPARE(out.transformX.evaluateAt(drift::secondsToUs(2.0)), 680.0);
     QCOMPARE(out.transformY.evaluateAt(0), 140.0);
+}
+
+namespace {
+
+// An angle laid out on the timeline the way a synced multicam track is: the clip sits at
+// `timelineStart` and its media is already lined up there.
+drift::Clip makeAngleClip(const QString &path, drift::TimeUs timelineStart,
+                          drift::TimeUs duration, drift::TimeUs srcIn)
+{
+    drift::Clip clip;
+    clip.id = QStringLiteral("angle-") + path;
+    clip.assetId = QStringLiteral("asset-") + path;
+    clip.path = path;
+    clip.name = path;
+    clip.type = drift::ClipType::Video;
+    clip.timelineStart = timelineStart;
+    clip.timelineDuration = duration;
+    clip.srcIn = srcIn;
+    clip.srcOut = srcIn + duration;
+    return clip;
+}
+
+} // namespace
+
+void CoreTest::applyMulticamSwitchPunchesAndRecuts()
+{
+    const drift::TimeUs start = 0;
+    const drift::TimeUs end = drift::secondsToUs(10.0);
+    QList<drift::MulticamCut> cuts;
+
+    // Unedited: the topmost camera is already live, so picking it does nothing.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 0, start, 0),
+             drift::MulticamSwitchResult::NoOp);
+    QVERIFY(cuts.isEmpty());
+    QCOMPARE(drift::multicamAngleAt(cuts, start, end, drift::secondsToUs(3.0), 0), 0);
+
+    // Pick-then-play: a switch at the start assigns the whole span.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, start, 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(cuts.size(), 1);
+    QCOMPARE(cuts.at(0).angle, 1);
+    QCOMPARE(drift::multicamAngleAt(cuts, start, end, drift::secondsToUs(4.0), 0), 1);
+
+    // Recut in the middle: left half keeps camera 1, from 4s camera 2 takes over.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 2, drift::secondsToUs(4.0), 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(cuts.size(), 2);
+    QCOMPARE(cuts.at(0).timeUs, start);
+    QCOMPARE(cuts.at(0).angle, 1);
+    QCOMPARE(cuts.at(1).timeUs, drift::secondsToUs(4.0));
+    QCOMPARE(cuts.at(1).angle, 2);
+    QCOMPARE(drift::multicamAngleAt(cuts, start, end, drift::secondsToUs(3.0), 0), 1);
+    QCOMPARE(drift::multicamAngleAt(cuts, start, end, drift::secondsToUs(4.0), 0), 2);
+
+    const QList<drift::MulticamInterval> intervals = drift::multicamIntervals(cuts, start, end, 0);
+    QCOMPARE(intervals.size(), 2);
+    QCOMPARE(intervals.at(0).endUs, drift::secondsToUs(4.0));
+    QCOMPARE(intervals.at(1).endUs, end);
+
+    // Switching on an existing cut only changes that interval.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 0, drift::secondsToUs(4.0), 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(cuts.at(1).angle, 0);
+}
+
+void CoreTest::applyMulticamSwitchMergesAdjacentSameCamera()
+{
+    const drift::TimeUs start = 0;
+    const drift::TimeUs end = drift::secondsToUs(10.0);
+    QList<drift::MulticamCut> cuts;
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, drift::secondsToUs(3.0), 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(cuts.size(), 2);
+
+    // Punching camera 0 at 3s makes both halves the initial camera, so the seam goes.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 0, drift::secondsToUs(3.0), 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(cuts.size(), 1);
+    QCOMPARE(cuts.at(0).angle, 0);
+    QCOMPARE(cuts.at(0).timeUs, start);
+}
+
+void CoreTest::applyMulticamSwitchRejectsEdges()
+{
+    const drift::TimeUs start = 0;
+    const drift::TimeUs end = drift::secondsToUs(10.0);
+    QList<drift::MulticamCut> cuts;
+
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, drift::secondsToUs(-1.0), 0),
+             drift::MulticamSwitchResult::OutOfRange);
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, end, 0),
+             drift::MulticamSwitchResult::OutOfRange);
+
+    // Closer to the start than a clip is allowed to be.
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, drift::kMinClipDurationUs / 2, 0),
+             drift::MulticamSwitchResult::TooCloseToEdge);
+    QVERIFY(cuts.isEmpty());
+
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, drift::secondsToUs(5.0), 0),
+             drift::MulticamSwitchResult::Applied);
+    QCOMPARE(drift::applyMulticamSwitch(cuts, start, end, 1, drift::secondsToUs(5.0), 0),
+             drift::MulticamSwitchResult::NoOp);
+}
+
+void CoreTest::sliceClipToTimelineRangeKeepsSourceInSync()
+{
+    drift::Clip src = makeAngleClip(QStringLiteral("cam.mp4"), 0, drift::secondsToUs(10.0),
+                                    drift::secondsToUs(20.0));
+    drift::Clip slice;
+    QVERIFY(drift::sliceClipToTimelineRange(src, drift::secondsToUs(2.0), drift::secondsToUs(5.0),
+                                            slice));
+    QCOMPARE(slice.timelineStart, drift::secondsToUs(2.0));
+    QCOMPARE(slice.timelineDuration, drift::secondsToUs(3.0));
+    QCOMPARE(slice.srcIn, drift::secondsToUs(22.0));
+    QCOMPARE(slice.srcOut, drift::secondsToUs(25.0));
+    QCOMPARE(slice.path, QStringLiteral("cam.mp4"));
+
+    drift::Clip miss;
+    QVERIFY(!drift::sliceClipToTimelineRange(src, drift::secondsToUs(11.0), drift::secondsToUs(12.0),
+                                             miss));
+    QVERIFY(!drift::sliceClipToTimelineRange(src, 0, drift::kMinClipDurationUs / 2, miss));
 }
 
 QTEST_MAIN(CoreTest)

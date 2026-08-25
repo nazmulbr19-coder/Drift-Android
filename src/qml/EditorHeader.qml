@@ -346,6 +346,20 @@ Rectangle {
                 }
             }
 
+            // Multicam. A separate window rather than a panel, so switching cameras never costs
+            // the editor any of the space it already has.
+            IconButton {
+                glyph: Theme.icons.grid
+                variant: "ghost"
+                tooltip: qsTr("Multicam")
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: {
+                    const win = root.Window.window
+                    if (win)
+                        win.openMulticam()
+                }
+            }
+
             // Decoder capability and host facts for bug reports.
             IconButton {
                 glyph: Theme.icons.bug

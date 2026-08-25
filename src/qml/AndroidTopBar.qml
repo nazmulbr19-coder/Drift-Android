@@ -308,6 +308,11 @@ Item {
                     onTriggered: root.Window.window.openExtras()
                 }
                 MenuRow {
+                    text: qsTr("Multicam")
+                    glyph: Theme.icons.grid
+                    onTriggered: root.Window.window.openMulticam()
+                }
+                MenuRow {
                     text: qsTr("Debug info")
                     glyph: Theme.icons.bug
                     onTriggered: root.Window.window.openDebugInfo()

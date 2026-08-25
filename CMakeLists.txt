@@ -518,6 +518,10 @@ qt_add_executable(drift
     src/ClipPreviewImageProvider.cpp
     src/ClipPreviewImageStore.h
     src/ClipPreviewImageStore.cpp
+    src/MulticamImageProvider.h
+    src/MulticamImageProvider.cpp
+    src/MulticamImageStore.h
+    src/MulticamImageStore.cpp
     src/TextStylePreviewImageProvider.h
     src/TextStylePreviewImageProvider.cpp
     src/models/AddonEndpoint.h
@@ -615,6 +619,7 @@ qt_add_qml_module(drift
         src/qml/DenoiseWindow.qml
         src/qml/SpeedCurveWindow.qml
         src/qml/FadeCurveWindow.qml
+        src/qml/MulticamWindow.qml
         src/qml/PropertiesPanel.qml
         src/qml/components/properties/GeneralInspector.qml
         src/qml/components/properties/TextInspector.qml

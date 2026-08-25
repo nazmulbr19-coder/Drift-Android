@@ -295,6 +295,7 @@ ApplicationWindow {
     DenoiseWindow { id: denoiseWindow }
     SpeedCurveWindow { id: speedCurveWindow }
     FadeCurveWindow { id: fadeCurveWindow }
+    MulticamWindow { id: multicamWindow }
 
     // Every inspector reaches these through Window.window.<name>() — the same contract
     // Main.qml offers on desktop. A missing one is a runtime TypeError, not a dead button.
@@ -312,6 +313,10 @@ ApplicationWindow {
 
     function openFadeCurve(track, clip) {
         fadeCurveWindow.openFor(track, clip)
+    }
+
+    function openMulticam() {
+        multicamWindow.openSession()
     }
 
     function openAddonManager(kind) {
@@ -345,6 +350,7 @@ ApplicationWindow {
     // Back handling defers to them instead of popping the stack behind them.
     readonly property bool toolWindowOpen: segmentationWindow.visible || denoiseWindow.visible
                                            || speedCurveWindow.visible || fadeCurveWindow.visible
+                                           || multicamWindow.visible
 
     function closeTopToolWindow() {
         if (segmentationWindow.visible)
@@ -355,6 +361,8 @@ ApplicationWindow {
             speedCurveWindow.close()
         else if (fadeCurveWindow.visible)
             fadeCurveWindow.close()
+        else if (multicamWindow.visible)
+            multicamWindow.close()
     }
 
     Timer {
@@ -418,6 +426,9 @@ ApplicationWindow {
         }
         function onOpenSegmentationWindowRequested(track, clip, startSeconds, durationSeconds) {
             segmentationWindow.openFor(track, clip, startSeconds, durationSeconds, true)
+        }
+        function onOpenMulticamWindowRequested() {
+            multicamWindow.openSession()
         }
         function onMissingAddons(addons) {
             missingAddonsDialog.openFor(addons)
