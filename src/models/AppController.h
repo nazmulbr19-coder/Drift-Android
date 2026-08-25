@@ -487,6 +487,12 @@ public:
     Q_INVOKABLE void setTextStyle(int trackIndex, int clipIndex, const QVariantMap &style);
     Q_INVOKABLE void applyTextPreset(int trackIndex, int clipIndex, const QString &presetId);
     Q_INVOKABLE QVariantList textPresets() const;
+    Q_INVOKABLE QVariantList userTextPresets() const;
+    Q_INVOKABLE QString saveTextStyleAsPreset(int trackIndex, int clipIndex, const QString &label);
+    Q_INVOKABLE bool renameUserTextPreset(const QString &presetId, const QString &label);
+    Q_INVOKABLE bool deleteUserTextPreset(const QString &presetId);
+    Q_INVOKABLE bool exportUserTextPreset(const QString &presetId, const QUrl &fileUrl);
+    Q_INVOKABLE bool importUserTextPreset(const QUrl &fileUrl);
     Q_INVOKABLE QVariantList fontCatalog() const;
     Q_INVOKABLE QVariantList fontCategories() const;
     Q_INVOKABLE void setClipBlendMode(int trackIndex, int clipIndex, const QString &mode);
@@ -860,6 +866,7 @@ signals:
     void guidesChanged();
     void shortcutsChanged();
     void assetFavoritesChanged();
+    void userTextPresetsChanged();
     void userEffectPresetsChanged();
     void canvasCropModeChanged();
     void backgroundChanged();

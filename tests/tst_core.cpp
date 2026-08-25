@@ -974,7 +974,7 @@ void CoreTest::textPresetsAreWellFormed()
         if (accent.highlight.enabled)
             QVERIFY(accent.highlight.color.isValid());
     }
-    QVERIFY(drift::textStyleForPresetId(QStringLiteral("nope")) == nullptr);
+    QVERIFY(!drift::textStyleForPresetId(QStringLiteral("nope")));
 }
 
 void CoreTest::karaokeWordIndexTracksTheCue()

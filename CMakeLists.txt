@@ -320,6 +320,8 @@ add_library(driftcore STATIC
     src/core/Transition.cpp
     src/core/TextStyle.h
     src/core/TextStyle.cpp
+    src/core/TextPresetStore.h
+    src/core/TextPresetStore.cpp
     src/core/EffectStackStore.h
     src/core/EffectStackStore.cpp
     src/core/ShapeStyle.h
