@@ -42,6 +42,7 @@ private slots:
     void addTrackInsertsEmptyTrackByType();
     void projectPersistenceRoundTrip();
     void darkModePreferencePersistsAcrossSessions();
+    void uiScalePersistsAcrossSessions();
     void exportFrameRatePersistsAcrossSessions();
     void lastExportSettingsNormalisesStringTypedValues();
     void textStyleBlendModeKeyframesAndEffects();
@@ -479,6 +480,58 @@ void EditorStateTest::darkModePreferencePersistsAcrossSessions()
     AppController relaunched(&library);
     QVERIFY(relaunched.darkModeOverridden());
     QCOMPARE(relaunched.darkModePreferred(), false);
+}
+
+void EditorStateTest::uiScalePersistsAcrossSessions()
+{
+    QStandardPaths::setTestModeEnabled(true);
+    const QString org = QCoreApplication::organizationName();
+    const QString app = QCoreApplication::applicationName();
+    const QByteArray previousScale = qgetenv("QT_SCALE_FACTOR");
+    QCoreApplication::setOrganizationName(QStringLiteral("DriftTest"));
+    QCoreApplication::setApplicationName(QStringLiteral("DriftTest"));
+    const auto restore = qScopeGuard([&] {
+        QSettings().remove(QStringLiteral("ui/scale"));
+        QCoreApplication::setOrganizationName(org);
+        QCoreApplication::setApplicationName(app);
+        QStandardPaths::setTestModeEnabled(false);
+        if (previousScale.isNull())
+            qunsetenv("QT_SCALE_FACTOR");
+        else
+            qputenv("QT_SCALE_FACTOR", previousScale);
+    });
+    QSettings().remove(QStringLiteral("ui/scale"));
+
+    AssetLibrary library;
+    {
+        AppController state(&library);
+        QCOMPARE(state.uiScale(), 1.0);
+
+        QSignalSpy spy(&state, &AppController::uiScaleChanged);
+        state.setUiScale(1.3);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(state.uiScale(), 1.25);
+
+        state.setUiScale(9.0);
+        QCOMPARE(state.uiScale(), 2.0);
+        state.setUiScale(0.1);
+        QCOMPARE(state.uiScale(), 1.0);
+        QVERIFY(!QSettings().contains(QStringLiteral("ui/scale")));
+
+        state.setUiScale(1.5);
+        QCOMPARE(state.uiScale(), 1.5);
+    }
+
+    AppController relaunched(&library);
+    QCOMPARE(relaunched.uiScale(), 1.5);
+
+    qunsetenv("QT_SCALE_FACTOR");
+    AppController::applyStoredUiScale();
+    QCOMPARE(qgetenv("QT_SCALE_FACTOR"), QByteArray("1.5"));
+
+    qputenv("QT_SCALE_FACTOR", "3");
+    AppController::applyStoredUiScale();
+    QCOMPARE(qgetenv("QT_SCALE_FACTOR"), QByteArray("3"));
 }
 
 void EditorStateTest::exportFrameRatePersistsAcrossSessions()
