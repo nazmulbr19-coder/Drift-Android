@@ -3995,7 +3995,8 @@ QVariantList AppController::whisperLanguages()
     return out;
 }
 
-void AppController::generateSubtitlesForClip(int trackIndex, int clipIndex, const QString &language)
+void AppController::generateSubtitlesForClip(int trackIndex, int clipIndex, const QString &language,
+                                             int maxWordsPerCue)
 {
     if (m_subtitleGenerating) {
         setLastMessage(QStringLiteral("Subtitle generation already in progress"), QStringLiteral("warning"));
@@ -4036,9 +4037,10 @@ void AppController::generateSubtitlesForClip(int trackIndex, int clipIndex, cons
     const double speed = clip.effectiveSpeed();
     const bool reverse = clip.reverse;
     const QString languageCode = language.trimmed().toLower();
+    const int wordsPerCue = std::max(0, maxWordsPerCue);
 
     (void)QtConcurrent::run([this, path, srcIn, srcOut, timelineStart, timelineDuration, speed,
-                             reverse, languageCode]() {
+                             reverse, languageCode, wordsPerCue]() {
         // Minutes of Whisper on a phone, and a backgrounded process is frozen and then killed with
         // nothing to resume from — the same reason the encode holds one.
         Exporter::BackgroundHold hold(QStringLiteral("Generating subtitles"));
@@ -4139,7 +4141,7 @@ void AppController::generateSubtitlesForClip(int trackIndex, int clipIndex, cons
                 setProgress(0.15 + 0.80 * fraction, status);
                 return m_subtitleGenCancel.loadRelaxed() == 0;
             },
-            languageCode);
+            languageCode, wordsPerCue);
 
         qWarning() << "[subtitles] transcribe done. ok:" << res.ok << "cancelled:" << res.cancelled
                    << "cues:" << res.cues.size() << "error:" << res.error;

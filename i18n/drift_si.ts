@@ -1734,6 +1734,18 @@
 <context>
     <name>AudioInspector</name>
     <message>
+        <source>Recommended caption length</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1 word per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 words per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>No audio</source>
         <translation>ශ්‍රව්‍ය නැත</translation>
     </message>
@@ -1760,6 +1772,10 @@
     <message>
         <source>Auto subtitles</source>
         <translation>ස්වයංක්‍රීය උපසිරැසි</translation>
+    </message>
+    <message>
+        <source>Shorter captions are timed by splitting each phrase evenly, so they can drift slightly out of sync with the speech.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Creating captions… %1%</source>
@@ -4666,6 +4682,10 @@ Quality: renders and shows every single frame, silently and slower than real tim
         <translation>පළමුව කාලරේඛාවේ වීඩියෝ හෝ ශ්‍රව්‍ය ක්ලිපයක් තෝරන්න.</translation>
     </message>
     <message>
+        <source>Shorter captions are timed by splitting each phrase evenly, so they can drift slightly out of sync with the speech.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Create captions from the selected clip&apos;s speech</source>
         <translation>තෝරාගත් ක්ලිපයේ කථනයෙන් උපසිරැසි සාදන්න</translation>
     </message>
@@ -4696,6 +4716,18 @@ Quality: renders and shows every single frame, silently and slower than real tim
     <message>
         <source>Needed for auto captions from speech</source>
         <translation>කථනයෙන් ස්වයංක්‍රීය උපසිරැසි ලබාගැනීමට අවශ්‍ය වේ</translation>
+    </message>
+    <message>
+        <source>Recommended caption length</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1 word per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 words per caption</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>

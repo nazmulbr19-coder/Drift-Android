@@ -1734,6 +1734,18 @@
 <context>
     <name>AudioInspector</name>
     <message>
+        <source>Recommended caption length</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1 word per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 words per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>No audio</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1759,6 +1771,10 @@
     </message>
     <message>
         <source>Auto subtitles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Shorter captions are timed by splitting each phrase evenly, so they can drift slightly out of sync with the speech.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4665,6 +4681,10 @@ Quality: renders and shows every single frame, silently and slower than real tim
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Shorter captions are timed by splitting each phrase evenly, so they can drift slightly out of sync with the speech.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Create captions from the selected clip&apos;s speech</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4694,6 +4714,18 @@ Quality: renders and shows every single frame, silently and slower than real tim
     </message>
     <message>
         <source>Needed for auto captions from speech</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Recommended caption length</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1 word per caption</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 words per caption</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
