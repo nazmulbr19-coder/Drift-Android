@@ -62,6 +62,8 @@ Item {
 
     property int renameClipTrack: -1
     property int renameClipIndex: -1
+    property int savePresetTrack: -1
+    property int savePresetClip: -1
 
     // TimelineClipItem's context menu calls this on its `panel`, so the touch timeline
     // has to answer it exactly as TimelinePanel does or "Rename…" is a TypeError.
@@ -75,6 +77,16 @@ Item {
         root.renameClipIndex = clipIndex
         clipRenameField.text = clips[clipIndex].name || ""
         clipRenameDialog.open()
+    }
+
+    function requestSaveEffectPreset(trackIndex, clipIndex) {
+        if (trackIndex < 0 || clipIndex < 0)
+            return
+        root.savePresetTrack = trackIndex
+        root.savePresetClip = clipIndex
+        const clips = root.tracks[trackIndex].clips || []
+        const name = clipIndex < clips.length ? (clips[clipIndex].name || "") : ""
+        effectPresetNameDialog.openWith(qsTr("Save effect preset"), name)
     }
 
     ThemedDialog {
@@ -158,6 +170,22 @@ Item {
             bookmarkRenameDialog.bookmarkIndex = -1
         }
         onRejected: bookmarkRenameDialog.bookmarkIndex = -1
+    }
+
+    NameDialog {
+        id: effectPresetNameDialog
+        placeholder: qsTr("My look")
+        onSubmitted: function(name) {
+            if (root.savePresetTrack < 0 || root.savePresetClip < 0)
+                return
+            EditorState.saveClipEffectsAsPreset(root.savePresetTrack, root.savePresetClip, name)
+            root.savePresetTrack = -1
+            root.savePresetClip = -1
+        }
+        onRejected: {
+            root.savePresetTrack = -1
+            root.savePresetClip = -1
+        }
     }
 
     onTimelineToolChanged: if (timelineTool === "") {

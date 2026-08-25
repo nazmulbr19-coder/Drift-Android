@@ -759,6 +759,9 @@ Item {
         ThemedContextMenu {
             id: clipContextMenu
 
+            property bool canPasteEffects: false
+            onAboutToShow: canPasteEffects = EditorState.clipboardHasEffects()
+
             ThemedMenuItem {
                 text: qsTr("Properties")
                 icon.name: Theme.icons.sliders
@@ -816,6 +819,28 @@ Item {
                 text: qsTr("Rename…")
                 icon.name: Theme.icons.pencil
                 onTriggered: clipItem.panel.requestRenameClip(clipItem.trackIndex, clipItem.clipIndex)
+            }
+            ThemedMenuSeparator { }
+            ThemedMenuItem {
+                text: qsTr("Copy effects")
+                icon.name: Theme.icons.wand
+                visible: clipItem.hasAnyEffects
+                onTriggered: EditorState.copyClipEffectsToClipboard(clipItem.trackIndex,
+                                                                    clipItem.clipIndex)
+            }
+            ThemedMenuItem {
+                text: qsTr("Paste effects")
+                icon.name: Theme.icons.clipboardPaste
+                enabled: clipContextMenu.canPasteEffects
+                onTriggered: EditorState.pasteEffectsFromClipboard(clipItem.trackIndex,
+                                                                   clipItem.clipIndex)
+            }
+            ThemedMenuItem {
+                text: qsTr("Save effects as preset…")
+                icon.name: Theme.icons.save
+                visible: clipItem.hasAnyEffects
+                onTriggered: clipItem.panel.requestSaveEffectPreset(clipItem.trackIndex,
+                                                                     clipItem.clipIndex)
             }
             ThemedMenuSeparator { }
             ThemedMenuItem {

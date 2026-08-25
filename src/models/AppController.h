@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/EffectStackStore.h"
 #include "core/Project.h"
 #include "core/Time.h"
 #include "engine/AudioOnsets.h"
@@ -588,6 +589,29 @@ public:
                                          const QString &key, double value);
     Q_INVOKABLE void previewSetAudioEffectParam(int trackIndex, int clipIndex, int effectIndex,
                                                 const QString &key, double value);
+
+    // Effect stacks travel as JSON on the system clipboard, so a copy also crosses to a second
+    // running instance. -1 for both indices means the whole clip.
+    Q_INVOKABLE void copyEffectToClipboard(int trackIndex, int clipIndex, int effectIndex);
+    Q_INVOKABLE void copyAudioEffectToClipboard(int trackIndex, int clipIndex, int effectIndex);
+    Q_INVOKABLE void copyClipEffectsToClipboard(int trackIndex, int clipIndex);
+    // Reading the clipboard is a synchronous round-trip to whichever process owns the selection,
+    // so callers ask this when a menu opens rather than binding it.
+    Q_INVOKABLE bool clipboardHasEffects() const;
+    Q_INVOKABLE void pasteEffectsFromClipboard(int trackIndex, int clipIndex);
+
+    Q_INVOKABLE QVariantList userEffectPresets() const;
+    Q_INVOKABLE QString saveEffectAsPreset(int trackIndex, int clipIndex, int effectIndex,
+                                           const QString &label);
+    Q_INVOKABLE QString saveAudioEffectAsPreset(int trackIndex, int clipIndex, int effectIndex,
+                                                const QString &label);
+    Q_INVOKABLE QString saveClipEffectsAsPreset(int trackIndex, int clipIndex,
+                                                const QString &label);
+    Q_INVOKABLE void applyEffectPreset(int trackIndex, int clipIndex, const QString &presetId);
+    Q_INVOKABLE bool renameUserEffectPreset(const QString &presetId, const QString &label);
+    Q_INVOKABLE bool deleteUserEffectPreset(const QString &presetId);
+    Q_INVOKABLE bool exportUserEffectPreset(const QString &presetId, const QUrl &fileUrl);
+    Q_INVOKABLE bool importUserEffectPreset(const QUrl &fileUrl);
     Q_INVOKABLE void setTrackMuted(int trackIndex, bool muted);
     Q_INVOKABLE void setTrackHidden(int trackIndex, bool hidden);
     Q_INVOKABLE bool trackMuted(int trackIndex) const;
@@ -836,6 +860,7 @@ signals:
     void guidesChanged();
     void shortcutsChanged();
     void assetFavoritesChanged();
+    void userEffectPresetsChanged();
     void canvasCropModeChanged();
     void backgroundChanged();
     void dirtyChanged();
@@ -866,6 +891,16 @@ protected:
     void dropKeyframeGraphPropertiesForEffect(int removedIndex);
     // Same idea after a reorder: fx.N.* indices move with the effect.
     void remapKeyframeGraphPropertiesForEffectMove(int fromIndex, int toIndex);
+    // Lifts one effect, one audio effect, or the whole stack off a clip. Every copy and
+    // save-as-preset entry point funnels through this, so all of them produce one payload shape.
+    drift::EffectStackPreset effectStackFor(int trackIndex, int clipIndex, int effectIndex,
+                                            int audioEffectIndex) const;
+    // Rescales, rebuilds against the catalog, then appends. Shared by paste and preset-apply.
+    void applyEffectStack(int trackIndex, int clipIndex, const drift::EffectStackPreset &stack,
+                          const QString &undoLabel);
+    void copyEffectStack(const drift::EffectStackPreset &stack, const QString &message);
+    QString saveEffectStack(const drift::EffectStackPreset &stack, const QString &label);
+    static drift::EffectStackPreset effectStackOnClipboard();
     // Publishes a finished beat analysis into m_beatAnalysis / m_beatSnapTargets.
     void applyBeatAnalysis(const AudioBeatAnalysis &analysis, double startSeconds, double durSeconds,
                            const QByteArray &fingerprint);

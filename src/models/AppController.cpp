@@ -52,6 +52,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QClipboard>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -72,6 +73,7 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <memory>
 #include <optional>
 
 namespace {
@@ -8279,6 +8281,24 @@ drift::Effect effectFromCatalogEntry(const EffectPresetEntry &def,
     return effect;
 }
 
+// The audio twin of effectFromCatalogEntry. Audio presets have no fixedParams and no filter
+// graph, so the name is the display name and the whole parameter map comes from the manifest.
+drift::Effect audioEffectFromCatalogEntry(const AudioEffectEntry &def,
+                                          const QMap<QString, QVariant> &overrides)
+{
+    drift::Effect effect;
+    effect.name = def.displayName;
+    effect.catalogId = def.id;
+    for (const drift::EffectParamSpec &p : def.parameters) {
+        const auto overrideIt = overrides.constFind(p.key);
+        if (overrideIt != overrides.constEnd())
+            effect.parameters.insert(p.key, overrideIt.value());
+        else
+            effect.parameters.insert(p.key, p.defaultVariant());
+    }
+    return effect;
+}
+
 bool templateSyncNeedsBeats(const QString &sync)
 {
     return sync == QLatin1String("onset") || sync == QLatin1String("beat")
@@ -9110,6 +9130,333 @@ void AppController::setAudioEffectParam(int trackIndex, int clipIndex, int effec
     clip.audioEffects[effectIndex].parameters.insert(key, value);
     pushProjectEdit(before, QStringLiteral("Edit audio effect"));
     finishEdit(QStringLiteral("Audio effect updated"));
+}
+
+// --- effect stacks: copy/paste and user presets ------------------------------
+
+drift::EffectStackPreset AppController::effectStackFor(int trackIndex, int clipIndex,
+                                                       int effectIndex, int audioEffectIndex) const
+{
+    drift::EffectStackPreset stack;
+    if (trackIndex < 0 || trackIndex >= m_project.tracks().size())
+        return stack;
+
+    const drift::Track &track = m_project.tracks().at(trackIndex);
+    if (clipIndex < 0 || clipIndex >= track.clips.size())
+        return stack;
+
+    const drift::Clip &clip = track.clips.at(clipIndex);
+    stack.label = clip.name;
+    stack.sourceDurationUs = clip.timelineDuration;
+
+    const bool wholeClip = effectIndex < 0 && audioEffectIndex < 0;
+    if (wholeClip) {
+        stack.effects = clip.effects;
+        stack.audioEffects = clip.audioEffects;
+        return stack;
+    }
+    if (effectIndex >= 0 && effectIndex < clip.effects.size())
+        stack.effects.append(clip.effects.at(effectIndex));
+    if (audioEffectIndex >= 0 && audioEffectIndex < clip.audioEffects.size())
+        stack.audioEffects.append(clip.audioEffects.at(audioEffectIndex));
+    return stack;
+}
+
+void AppController::applyEffectStack(int trackIndex, int clipIndex,
+                                     const drift::EffectStackPreset &stack,
+                                     const QString &undoLabel)
+{
+    if (trackIndex < 0 || trackIndex >= m_project.tracks().size())
+        return;
+
+    if (clipIndex < 0 || clipIndex >= m_project.tracks().at(trackIndex).clips.size())
+        return;
+    if (stack.isEmpty())
+        return;
+
+    const drift::Clip &source = m_project.tracks().at(trackIndex).clips.at(clipIndex);
+    const drift::TimeUs targetDurationUs = source.timelineDuration;
+    const bool clipHasAudio =
+        source.type == drift::ClipType::Video || source.type == drift::ClipType::Audio;
+
+    QStringList missing;
+    QList<drift::Effect> video;
+    video.reserve(stack.effects.size());
+    for (const drift::Effect &incoming : stack.effects) {
+        if (const EffectPresetEntry *def = effectDefForId(incoming.catalogId)) {
+            drift::Effect effect = effectFromCatalogEntry(*def, incoming.parameters);
+            effect.paramKeyframes = incoming.paramKeyframes;
+            effect.enabled = incoming.enabled;
+            video.append(effect);
+        } else {
+            video.append(incoming);
+            if (!incoming.catalogId.isEmpty())
+                missing.append(incoming.catalogId);
+        }
+    }
+
+    QList<drift::Effect> audio;
+    if (clipHasAudio) {
+        audio.reserve(stack.audioEffects.size());
+        for (const drift::Effect &incoming : stack.audioEffects) {
+            if (const AudioEffectEntry *def = audioEffectDefForId(incoming.catalogId)) {
+                drift::Effect effect = audioEffectFromCatalogEntry(*def, incoming.parameters);
+                effect.enabled = incoming.enabled;
+                audio.append(effect);
+            } else {
+                audio.append(incoming);
+                if (!incoming.catalogId.isEmpty())
+                    missing.append(incoming.catalogId);
+            }
+        }
+    }
+
+    drift::rescaleEffectKeyframes(video, stack.sourceDurationUs, targetDurationUs);
+
+    const drift::Project before = m_project;
+    drift::Clip &clip = m_project.tracks()[trackIndex].clips[clipIndex];
+    clip.effects.append(video);
+    clip.audioEffects.append(audio);
+    m_selectedTrack = trackIndex;
+    m_selectedClip = clipIndex;
+    m_selection = {qMakePair(trackIndex, clipIndex)};
+    pushProjectEdit(before, undoLabel);
+    finishEdit(undoLabel);
+
+    if (!missing.isEmpty()) {
+        missing.removeDuplicates();
+        missing.sort();
+        const QString sample = missing.mid(0, 3).join(QStringLiteral(", "));
+        setLastMessage(missing.size() == 1
+                           ? tr("This stack uses “%1”, which isn’t installed — it "
+                                "won’t show. Open Extras to install it.").arg(sample)
+                           : tr("This stack uses %1 effects that aren’t installed — they "
+                                "won’t show. Open Extras to install them.")
+                                 .arg(missing.size()),
+                       QStringLiteral("warning"));
+    }
+}
+
+void AppController::copyEffectToClipboard(int trackIndex, int clipIndex, int effectIndex)
+{
+    copyEffectStack(effectStackFor(trackIndex, clipIndex, effectIndex, -1), tr("Effect copied"));
+}
+
+void AppController::copyAudioEffectToClipboard(int trackIndex, int clipIndex, int effectIndex)
+{
+    copyEffectStack(effectStackFor(trackIndex, clipIndex, -1, effectIndex),
+                    tr("Audio effect copied"));
+}
+
+void AppController::copyClipEffectsToClipboard(int trackIndex, int clipIndex)
+{
+    copyEffectStack(effectStackFor(trackIndex, clipIndex, -1, -1), tr("Effects copied"));
+}
+
+void AppController::copyEffectStack(const drift::EffectStackPreset &stack, const QString &message)
+{
+    if (stack.isEmpty()) {
+        setLastMessage(tr("This clip has no effects to copy"), QStringLiteral("error"));
+        return;
+    }
+    QClipboard *board = QGuiApplication::clipboard();
+    if (!board)
+        return;
+    board->setText(QString::fromUtf8(
+        QJsonDocument(drift::effectStackToJson(stack)).toJson(QJsonDocument::Indented)));
+    setLastMessage(message, QStringLiteral("success"));
+}
+
+drift::EffectStackPreset AppController::effectStackOnClipboard()
+{
+    const QClipboard *board = QGuiApplication::clipboard();
+    if (!board)
+        return {};
+    const QString text = board->text();
+    if (!text.contains(QLatin1String("\"drift\"")))
+        return {};
+    return drift::effectStackFromJson(QJsonDocument::fromJson(text.toUtf8()).object());
+}
+
+bool AppController::clipboardHasEffects() const
+{
+    return !effectStackOnClipboard().isEmpty();
+}
+
+void AppController::pasteEffectsFromClipboard(int trackIndex, int clipIndex)
+{
+    const drift::EffectStackPreset stack = effectStackOnClipboard();
+    if (stack.isEmpty()) {
+        setLastMessage(tr("No effects on the clipboard"), QStringLiteral("error"));
+        return;
+    }
+    applyEffectStack(trackIndex, clipIndex, stack, tr("Paste effects"));
+}
+
+QVariantList AppController::userEffectPresets() const
+{
+    QVariantList out;
+    for (const drift::EffectStackPreset &preset : drift::EffectStackStore::instance().presets()) {
+        QStringList labels;
+        for (const drift::Effect &effect : preset.effects) {
+            const EffectPresetEntry *def = effectDefForId(effect.catalogId);
+            labels.append(def ? def->meta.displayName : effect.catalogId);
+        }
+        for (const drift::Effect &effect : preset.audioEffects) {
+            const AudioEffectEntry *def = audioEffectDefForId(effect.catalogId);
+            labels.append(def ? def->displayName : effect.catalogId);
+        }
+        out.append(QVariantMap{
+            {QStringLiteral("id"), preset.id},
+            {QStringLiteral("label"), preset.label},
+            {QStringLiteral("effectCount"), preset.effects.size()},
+            {QStringLiteral("audioEffectCount"), preset.audioEffects.size()},
+            {QStringLiteral("labels"), labels},
+        });
+    }
+    return out;
+}
+
+QString AppController::saveEffectStack(const drift::EffectStackPreset &stack, const QString &label)
+{
+    if (stack.isEmpty()) {
+        setLastMessage(tr("There are no effects to save"), QStringLiteral("error"));
+        return {};
+    }
+    const QString presetId = drift::EffectStackStore::instance().add(label, stack);
+    if (presetId.isEmpty()) {
+        setLastMessage(tr("Could not save the effect preset"), QStringLiteral("error"));
+        return {};
+    }
+    emit userEffectPresetsChanged();
+    setLastMessage(tr("Effect preset saved"), QStringLiteral("success"));
+    return presetId;
+}
+
+QString AppController::saveEffectAsPreset(int trackIndex, int clipIndex, int effectIndex,
+                                          const QString &label)
+{
+    return saveEffectStack(effectStackFor(trackIndex, clipIndex, effectIndex, -1), label);
+}
+
+QString AppController::saveAudioEffectAsPreset(int trackIndex, int clipIndex, int effectIndex,
+                                               const QString &label)
+{
+    return saveEffectStack(effectStackFor(trackIndex, clipIndex, -1, effectIndex), label);
+}
+
+QString AppController::saveClipEffectsAsPreset(int trackIndex, int clipIndex, const QString &label)
+{
+    return saveEffectStack(effectStackFor(trackIndex, clipIndex, -1, -1), label);
+}
+
+void AppController::applyEffectPreset(int trackIndex, int clipIndex, const QString &presetId)
+{
+    const std::optional<drift::EffectStackPreset> preset =
+        drift::EffectStackStore::instance().presetForId(presetId);
+    if (!preset)
+        return;
+    applyEffectStack(trackIndex, clipIndex, *preset, tr("Apply effect preset"));
+}
+
+bool AppController::renameUserEffectPreset(const QString &presetId, const QString &label)
+{
+    if (!drift::EffectStackStore::instance().rename(presetId, label)) {
+        setLastMessage(tr("Could not rename the effect preset"), QStringLiteral("error"));
+        return false;
+    }
+    emit userEffectPresetsChanged();
+    setLastMessage(tr("Effect preset renamed"), QStringLiteral("success"));
+    return true;
+}
+
+bool AppController::deleteUserEffectPreset(const QString &presetId)
+{
+    if (!drift::EffectStackStore::instance().remove(presetId)) {
+        setLastMessage(tr("Could not delete the effect preset"), QStringLiteral("error"));
+        return false;
+    }
+    emit userEffectPresetsChanged();
+    setLastMessage(tr("Effect preset deleted"), QStringLiteral("success"));
+    return true;
+}
+
+bool AppController::exportUserEffectPreset(const QString &presetId, const QUrl &fileUrl)
+{
+    const std::optional<drift::EffectStackPreset> preset =
+        drift::EffectStackStore::instance().presetForId(presetId);
+    if (!preset)
+        return false;
+
+    drift::EffectStackPreset out = *preset;
+    out.id.clear();
+    const QByteArray json = QJsonDocument(drift::effectStackToJson(out)).toJson(QJsonDocument::Indented);
+
+#ifdef Q_OS_ANDROID
+    if (AndroidUri::isContentUri(fileUrl)) {
+        std::unique_ptr<QFile> sink = AndroidUri::openForWrite(fileUrl);
+        if (!sink) {
+            setLastMessage(tr("Could not export the effect preset"), QStringLiteral("error"));
+            return false;
+        }
+        if (sink->write(json) != json.size()) {
+            setLastMessage(tr("Could not export the effect preset"), QStringLiteral("error"));
+            return false;
+        }
+        setLastMessage(tr("Effect preset exported"), QStringLiteral("success"));
+        return true;
+    }
+#endif
+
+    const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
+    if (path.isEmpty())
+        return false;
+    if (!drift::EffectStackStore::instance().exportToFile(presetId, path)) {
+        setLastMessage(tr("Could not export the effect preset"), QStringLiteral("error"));
+        return false;
+    }
+    setLastMessage(tr("Effect preset exported"), QStringLiteral("success"));
+    return true;
+}
+
+bool AppController::importUserEffectPreset(const QUrl &fileUrl)
+{
+#ifdef Q_OS_ANDROID
+    if (AndroidUri::isContentUri(fileUrl)) {
+        std::unique_ptr<QFile> src = AndroidUri::openForRead(fileUrl);
+        if (!src) {
+            setLastMessage(tr("Could not import the effect preset"), QStringLiteral("error"));
+            return false;
+        }
+        drift::EffectStackPreset incoming =
+            drift::effectStackFromJson(QJsonDocument::fromJson(src->readAll()).object());
+        if (incoming.isEmpty()) {
+            setLastMessage(tr("Could not import the effect preset"), QStringLiteral("error"));
+            return false;
+        }
+        QString label = incoming.label;
+        if (label.isEmpty())
+            label = AndroidUri::displayName(fileUrl);
+        if (drift::EffectStackStore::instance().add(label, incoming).isEmpty()) {
+            setLastMessage(tr("Could not import the effect preset"), QStringLiteral("error"));
+            return false;
+        }
+        emit userEffectPresetsChanged();
+        setLastMessage(tr("Effect preset imported"), QStringLiteral("success"));
+        return true;
+    }
+#endif
+
+    const QString path = fileUrl.isLocalFile() ? fileUrl.toLocalFile() : fileUrl.toString();
+    if (path.isEmpty())
+        return false;
+    if (drift::EffectStackStore::instance().importFromFile(path).isEmpty()) {
+        setLastMessage(tr("Could not import the effect preset"), QStringLiteral("error"));
+        return false;
+    }
+    emit userEffectPresetsChanged();
+    setLastMessage(tr("Effect preset imported"), QStringLiteral("success"));
+    return true;
 }
 
 void AppController::setTrackMuted(int trackIndex, bool muted)

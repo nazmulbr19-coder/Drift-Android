@@ -320,6 +320,8 @@ add_library(driftcore STATIC
     src/core/Transition.cpp
     src/core/TextStyle.h
     src/core/TextStyle.cpp
+    src/core/EffectStackStore.h
+    src/core/EffectStackStore.cpp
     src/core/ShapeStyle.h
     src/core/ShapeStyle.cpp
     src/core/ShapePath.h
@@ -619,6 +621,7 @@ qt_add_qml_module(drift
         src/qml/components/assets/MediaAssetsTab.qml
         src/qml/components/assets/AssetCategoryChips.qml
         src/qml/components/assets/AssetFavoriteButton.qml
+        src/qml/components/assets/EffectStacksSection.qml
         src/qml/TimelinePanel.qml
         src/qml/components/timeline/TimelineToolbar.qml
         src/qml/components/timeline/TrackHeaderColumn.qml
@@ -655,6 +658,7 @@ qt_add_qml_module(drift
         src/qml/components/ThemedProgressBar.qml
         src/qml/components/ThemedLabel.qml
         src/qml/components/ThemedDialog.qml
+        src/qml/components/NameDialog.qml
         src/qml/components/AddonManagerDialog.qml
         src/qml/components/AddonStartupDialog.qml
         src/qml/components/MissingAddonsDialog.qml

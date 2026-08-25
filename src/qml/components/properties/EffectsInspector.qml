@@ -10,6 +10,7 @@ Item {
     // Raised by the empty state; Main wires it to the assets panel so
     // "Browse effects" actually takes the user somewhere.
     signal browseEffectsRequested()
+    signal saveEffectPresetRequested(int effectIndex)
 
     property int clipDataRevision: 0
     readonly property var clipData: {
@@ -231,6 +232,31 @@ Item {
                     radius: Theme.radiusSm
                     color: Theme.panelAccent
 
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: effectCardMenu.popup()
+                    }
+                    TapHandler {
+                        acceptedButtons: Qt.LeftButton
+                        enabled: Theme.touchUi
+                        onLongPressed: effectCardMenu.popup()
+                    }
+                    ThemedContextMenu {
+                        id: effectCardMenu
+                        ThemedMenuItem {
+                            text: qsTr("Copy this effect")
+                            icon.name: Theme.icons.copy
+                            onTriggered: EditorState.copyEffectToClipboard(
+                                             EditorState.selectedTrack, EditorState.selectedClip,
+                                             effectCard.index)
+                        }
+                        ThemedMenuItem {
+                            text: qsTr("Save as preset…")
+                            icon.name: Theme.icons.save
+                            onTriggered: root.saveEffectPresetRequested(effectCard.index)
+                        }
+                    }
+
                     Row {
                         id: effectHeader
                         anchors.left: parent.left
@@ -395,5 +421,27 @@ Item {
                 }
             }
         }
+
+        Row {
+            visible: root.hasSelection
+            width: parent.width
+            spacing: Theme.spacingSm
+
+            ThemedButton {
+                text: qsTr("Paste effects")
+                glyph: Theme.icons.clipboardPaste
+                variant: "secondary"
+                onClicked: EditorState.pasteEffectsFromClipboard(
+                               EditorState.selectedTrack, EditorState.selectedClip)
+            }
+            ThemedButton {
+                text: qsTr("Save as preset…")
+                glyph: Theme.icons.save
+                variant: "secondary"
+                visible: root.selectedEffects.length > 0
+                onClicked: root.saveEffectPresetRequested(-1)
+            }
+        }
+
     }
 }

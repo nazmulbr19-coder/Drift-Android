@@ -17,6 +17,9 @@ PanelFrame {
     // Raised by the Effects / Audio empty states; Main wires them to the
     // assets panel so the browse CTAs actually take the user somewhere.
     signal browseEffectsRequested()
+
+    // -1 while the prompt is saving the whole stack; otherwise the one effect it was raised on.
+    property int savePresetEffectIndex: -1
     signal browseAudioEffectsRequested()
 
     // selectedClipData is a QVariantMap; key the binding on an explicit revision
@@ -614,6 +617,13 @@ PanelFrame {
                     width: tabColumn.width
                     visible: root.currentTabId === "effects"
                     onBrowseEffectsRequested: root.browseEffectsRequested()
+                    onSaveEffectPresetRequested: function(effectIndex) {
+                        root.savePresetEffectIndex = effectIndex
+                        effectPresetNameDialog.openWith(
+                            effectIndex < 0 ? qsTr("Save effect preset")
+                                            : qsTr("Save effect as preset"),
+                            root.hasSelection ? (root.clipData.name || "") : "")
+                    }
                 }
 
                 AudioEffectsInspector {
@@ -635,5 +645,21 @@ PanelFrame {
             clip: root.hasSelection ? root.clipData : null
             formatSeconds: root.formatSeconds
         }
+    }
+
+    NameDialog {
+        id: effectPresetNameDialog
+        placeholder: qsTr("My look")
+        onSubmitted: function(name) {
+            if (root.savePresetEffectIndex < 0)
+                EditorState.saveClipEffectsAsPreset(EditorState.selectedTrack,
+                                                    EditorState.selectedClip, name)
+            else
+                EditorState.saveEffectAsPreset(EditorState.selectedTrack,
+                                               EditorState.selectedClip,
+                                               root.savePresetEffectIndex, name)
+            root.savePresetEffectIndex = -1
+        }
+        onRejected: root.savePresetEffectIndex = -1
     }
 }
