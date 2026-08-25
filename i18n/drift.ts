@@ -2284,6 +2284,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>This clip was scanned before 3D face mesh was supported. Re-detect faces to enable the 3D Face Mesh effect.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Re-detect faces</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2365,6 +2369,18 @@
     </message>
     <message>
         <source>Choose %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>: (none)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QVector3D>
 
 #include <algorithm>
 #include <array>
@@ -23,6 +24,7 @@ using drift::ort::sessionNames;
 
 constexpr int kMaxFaces = 4;
 constexpr int kLandmarkPoints = 468; // before the iris rings the attention head adds
+static_assert(kLandmarkPoints == kFaceMeshPoints);
 constexpr int kIrisPoints = 5;       // centre + 4 ring points, per eye
 
 const char *const kDetectorFile = "face_detector.onnx";
@@ -659,6 +661,17 @@ FaceAnchors FaceLandmarker::Impl::runLandmark(const QImage &frame, const Detecti
             anchors.poseOz = origin.z;
             anchors.hasPose = true;
         }
+    }
+
+    // Pose failing means the 3D basis is unusable, so the mesh is omitted rather than stored as a
+    // 2D-only cloud the warp effect cannot place.
+    if (anchors.hasPose) {
+        anchors.mesh.reserve(kLandmarkPoints);
+        for (int i = 0; i < kLandmarkPoints; ++i) {
+            const Vec3 p = meshPoint3(i);
+            anchors.mesh.append(QVector3D(float(p.x), float(p.y), float(p.z)));
+        }
+        anchors.hasMesh = true;
     }
 
     anchors.valid = true;

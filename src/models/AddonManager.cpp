@@ -8,6 +8,7 @@
 #include "engine/EffectCatalog.h"
 #include "engine/EffectTemplateCatalog.h"
 #include "engine/EmojiCatalog.h"
+#include "engine/FacePropCatalog.h"
 #include "engine/FontCatalog.h"
 #include "engine/OrtRuntime.h"
 #include "engine/StickerCatalog.h"
@@ -619,6 +620,8 @@ void AddonManager::reloadForKinds(const QStringList &kinds)
             reloadFontCatalog();
         else if (kind == QLatin1String("stickers"))
             reloadStickerCatalog();
+        else if (kind == QLatin1String("face-props"))
+            reloadFacePropCatalog();
         else if (kind == QLatin1String("emoji-font"))
             reloadEmojiCatalog();
         else if (kind == QLatin1String("effects"))

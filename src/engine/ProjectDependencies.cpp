@@ -106,6 +106,19 @@ QList<MediaEntry> collectMedia(const Project &project, bool embedSource)
         for (const Clip &clip : track.clips) {
             append(clip.mask.mattePath, MediaRole::Matte, true);
             append(clip.faceTrackPath, MediaRole::FaceTrack, true);
+            for (const Effect &effect : clip.effects) {
+                const EffectPresetEntry *def = effectDefForId(effect.catalogId);
+                if (!def)
+                    continue;
+                for (const drift::EffectParamSpec &spec : def->meta.parameters) {
+                    if (!spec.isFilePath())
+                        continue;
+                    const QString modelPath = effect.parameters.value(spec.key).toString();
+                    if (modelPath.isEmpty())
+                        continue;
+                    append(modelPath, MediaRole::Model3d, true);
+                }
+            }
         }
     }
 
@@ -126,8 +139,16 @@ QList<AddonRef> collectAddons(const Project &project)
     for (const Track &track : project.tracks()) {
         for (const Clip &clip : track.clips) {
             for (const Effect &effect : clip.effects) {
-                if (const EffectPresetEntry *def = effectDefForId(effect.catalogId))
+                if (const EffectPresetEntry *def = effectDefForId(effect.catalogId)) {
                     addForPath(def->gpu.packageDir, QStringLiteral("effects"));
+                    for (const drift::EffectParamSpec &spec : def->meta.parameters) {
+                        if (!spec.isFilePath())
+                            continue;
+                        const QString modelPath = effect.parameters.value(spec.key).toString();
+                        if (!modelPath.isEmpty())
+                            addForPath(modelPath, QStringLiteral("face-props"));
+                    }
+                }
             }
             for (const Effect &effect : clip.audioEffects) {
                 if (const AudioEffectEntry *def = audioEffectDefForId(effect.catalogId))

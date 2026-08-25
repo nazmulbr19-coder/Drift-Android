@@ -24,7 +24,7 @@ QVariant jsonToVariant(const QJsonValue &value);
 
 // Parse "parameters": [...]. Rejects identifiers colliding with reserved uniforms when gpuBackend.
 bool parseParameters(const QJsonArray &params, QList<drift::EffectParamSpec> *out, bool gpuBackend,
-                     QString *errorOut);
+                     QString *errorOut, const QString &packageDir = {});
 
 void parseFixedParams(const QJsonObject &obj, QMap<QString, QVariant> *out);
 
