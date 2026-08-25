@@ -82,6 +82,9 @@ public:
     Q_INVOKABLE void refreshFrame();
     Q_INVOKABLE void setPreviewRenderSize(int width, int height);
 
+    void setLoopWorkArea(bool enabled) { m_loopWorkArea = enabled; }
+    bool loopWorkArea() const { return m_loopWorkArea; }
+
     // Id of the text clip currently edited in place on the preview; that clip is
     // omitted from the composited frame so the QML inline editor stands in for it.
     void setEditingClipId(const QString &id);
@@ -104,6 +107,7 @@ private:
     void onCompositeFinished();
     void onFrameReady(const GpuFrameTexture &frame);
     void checkEndOfTimeline(drift::TimeUs timeUs);
+    bool shouldLoopWorkArea(drift::TimeUs *loopInOut, drift::TimeUs *loopOutOut) const;
     bool isQualityMode() const { return m_playbackMode == QStringLiteral("quality"); }
     drift::TimeUs frameStepUs() const;
     FrameCompositor::RenderOptions playbackRenderOptions() const;
@@ -140,4 +144,5 @@ private:
     int m_previewRenderWidth = 0;
     int m_previewRenderHeight = 0;
     int m_sampleRate = 48000;
+    bool m_loopWorkArea = false;
 };

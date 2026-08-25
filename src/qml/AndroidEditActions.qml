@@ -194,6 +194,41 @@ Item {
             Divider { }
 
             ActionButton {
+                glyph: Theme.icons.setStart
+                tooltip: qsTr("Mark work area in at current time")
+                onClicked: EditorState.markWorkAreaIn()
+            }
+
+            ActionButton {
+                glyph: Theme.icons.setEnd
+                tooltip: qsTr("Mark work area out at current time")
+                onClicked: EditorState.markWorkAreaOut()
+            }
+
+            ActionButton {
+                glyph: Theme.icons.chevronLeft
+                tooltip: qsTr("Go to work area in")
+                enabled: EditorState.workAreaActive
+                onClicked: EditorState.goToWorkAreaIn()
+            }
+
+            ActionButton {
+                glyph: Theme.icons.chevronRight
+                tooltip: qsTr("Go to work area out")
+                enabled: EditorState.workAreaActive
+                onClicked: EditorState.goToWorkAreaOut()
+            }
+
+            ActionButton {
+                glyph: Theme.icons.x
+                tooltip: qsTr("Clear work area")
+                enabled: EditorState.workAreaInSeconds >= 0 || EditorState.workAreaOutSeconds >= 0
+                onClicked: EditorState.clearWorkArea()
+            }
+
+            Divider { }
+
+            ActionButton {
                 glyph: Theme.icons.magnet
                 tooltip: qsTr("Toggle snapping")
                 active: EditorState.snapEnabled

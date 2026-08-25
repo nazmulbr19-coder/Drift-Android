@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Time.h"
+
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -42,6 +44,9 @@ struct ExportSettings
     QString audioCodecId = QStringLiteral("aac");
     int audioBitrateKbps = 192;
     bool audioOnly = false;
+    // Inclusive start / exclusive end of the range to encode. Both 0 means the full timeline.
+    drift::TimeUs startUs = 0;
+    drift::TimeUs endUs = 0;
     QString metadataTitle;
     QString metadataArtist;
     QString metadataAlbum;

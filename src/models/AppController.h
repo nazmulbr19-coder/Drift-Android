@@ -150,6 +150,11 @@ class AppController : public QObject
     Q_PROPERTY(bool inlineTextEditing READ inlineTextEditing NOTIFY inlineTextEditingChanged)
     Q_PROPERTY(QVariantList actions READ actions NOTIFY shortcutsChanged)
     Q_PROPERTY(QVariantList bookmarks READ bookmarks NOTIFY bookmarksChanged)
+    Q_PROPERTY(bool workAreaActive READ workAreaActive NOTIFY workAreaChanged)
+    Q_PROPERTY(double workAreaInSeconds READ workAreaInSeconds NOTIFY workAreaChanged)
+    Q_PROPERTY(double workAreaOutSeconds READ workAreaOutSeconds NOTIFY workAreaChanged)
+    Q_PROPERTY(bool loopWorkAreaEnabled READ loopWorkAreaEnabled WRITE setLoopWorkAreaEnabled
+                   NOTIFY loopWorkAreaEnabledChanged)
     Q_PROPERTY(QString projectName READ projectName WRITE setProjectName NOTIFY projectNameChanged)
     Q_PROPERTY(QVariantMap projectMetadata READ projectMetadata NOTIFY projectMetadataChanged)
     Q_PROPERTY(bool packaging READ packaging NOTIFY packagingChanged)
@@ -239,6 +244,11 @@ public:
     QVariantMap background() const;
     QVariantList actions() const;
     QVariantList bookmarks() const;
+    bool workAreaActive() const { return m_project.hasWorkArea(); }
+    double workAreaInSeconds() const;
+    double workAreaOutSeconds() const;
+    bool loopWorkAreaEnabled() const { return m_loopWorkAreaEnabled; }
+    void setLoopWorkAreaEnabled(bool enabled);
     QString projectName() const;
     QString lastMessage() const { return m_lastMessage; }
     QString lastMessageSeverity() const { return m_lastMessageSeverity; }
@@ -653,6 +663,12 @@ public:
     // within the snap threshold — same key for mark and unmark.
     Q_INVOKABLE void toggleBookmarkAtPlayhead();
     Q_INVOKABLE void removeBookmarkNearPlayhead();
+    Q_INVOKABLE void markWorkAreaIn();
+    Q_INVOKABLE void markWorkAreaOut();
+    Q_INVOKABLE void goToWorkAreaIn();
+    Q_INVOKABLE void goToWorkAreaOut();
+    Q_INVOKABLE void clearWorkArea();
+    Q_INVOKABLE void toggleLoopWorkArea();
     Q_INVOKABLE void freezeFrameAtPlayhead();
     Q_INVOKABLE void copySelection();
     Q_INVOKABLE void cutSelection();
@@ -839,6 +855,8 @@ signals:
     void selectedClipDataChanged();
     void selectedTransitionDataChanged();
     void bookmarksChanged();
+    void workAreaChanged();
+    void loopWorkAreaEnabledChanged();
     void projectNameChanged();
     void projectMetadataChanged();
     void packagingChanged();
@@ -927,7 +945,8 @@ protected:
                               double outDy, bool corner);
     // Recollects m_beatSnapTargets from whichever layers are currently visible.
     void rebuildBeatSnapTargets();
-    // Beat onsets plus project bookmarks — anything clips should magnet to when snap is on.
+    // Beat onsets plus project bookmarks and the work-area In/Out — anything clips
+    // should magnet to when snap is on.
     QList<drift::TimeUs> extraSnapTargets() const;
     void refreshSegmentationPreview();
     void runSegmentationSeed(int generation);
@@ -1020,6 +1039,7 @@ protected:
     bool m_mediaGridMode = true;
     bool m_autoKeyEnabled = false;
     bool m_reopenLastProject = false;
+    bool m_loopWorkAreaEnabled = false;
     QStringList m_keyframeGraphHiddenProperties;
     bool m_subtitleEditing = false;
     int m_selectedSubtitleCue = -1;

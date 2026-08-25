@@ -32,6 +32,7 @@ ThemedDialog {
 
     // Bitrate combo: preset kbps values, or "custom"
     property string audioBitrateChoice: "192"
+    property bool exportWorkAreaOnly: false
     readonly property var audioBitratePresets: [96, 128, 160, 192, 256, 320]
     readonly property var audioBitrateModel: [
         { label: qsTr("96 kbps"), value: "96" },
@@ -56,6 +57,16 @@ ThemedDialog {
     readonly property var videoPresetList: (currentVideoCodec && currentVideoCodec.presets) ? currentVideoCodec.presets : []
     readonly property bool audioLossless: !!(currentAudioCodec && currentAudioCodec.lossless)
     readonly property bool isAudioOnly: exportMode === "audio"
+
+    function formatWorkAreaTime(seconds) {
+        const clamped = Math.max(0, seconds)
+        const m = Math.floor(clamped / 60)
+        const s = clamped - m * 60
+        const whole = Math.floor(s)
+        const frac = Math.floor((s - whole) * 100)
+        return String(m).padStart(2, "0") + ":" + String(whole).padStart(2, "0") + "."
+               + String(frac).padStart(2, "0")
+    }
 
     function codecById(list, id) {
         for (var i = 0; i < list.length; ++i) {
@@ -234,6 +245,8 @@ ThemedDialog {
         // Codec catalog defaults only on a fresh dialog — otherwise they wipe the remembered CRF.
         if (!hasRemembered)
             applyVideoCodecDefaults(codecById(videoCodecs, videoCodecId))
+        exportWorkAreaOnly = EditorState.workAreaActive
+                && (remembered.exportWorkAreaOnly === true)
         refreshCodecMeta()
         syncComboIndices()
         open()
@@ -275,6 +288,11 @@ ThemedDialog {
             "audioCodecId": audioCodecId,
             "audioBitrateKbps": audioBitrateKbps,
             "audioOnly": isAudioOnly
+        }
+        s.exportWorkAreaOnly = exportWorkAreaOnly && EditorState.workAreaActive
+        if (s.exportWorkAreaOnly) {
+            s.startUs = Math.round(EditorState.workAreaInSeconds * 1000000)
+            s.endUs = Math.round(EditorState.workAreaOutSeconds * 1000000)
         }
         if (isAudioOnly) {
             if (tagTitleField.text.length)
@@ -355,6 +373,17 @@ ThemedDialog {
                         root.syncComboIndices()
                     }
                 }
+            }
+
+            ThemedCheckBox {
+                width: parent.width
+                visible: EditorState.workAreaActive
+                text: qsTr("Export work area only (%1 – %2)")
+                      .arg(root.formatWorkAreaTime(EditorState.workAreaInSeconds))
+                      .arg(root.formatWorkAreaTime(EditorState.workAreaOutSeconds))
+                checked: root.exportWorkAreaOnly
+                tooltip: qsTr("Encode only the marked In/Out range instead of the full timeline")
+                onToggled: root.exportWorkAreaOnly = checked
             }
 
             // ---- Video mode ----

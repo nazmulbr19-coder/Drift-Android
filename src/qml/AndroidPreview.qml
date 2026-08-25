@@ -494,6 +494,20 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     buttonSize: Theme.androidIconButtonSize
                     iconSize: Theme.iconSizeBase
+                    glyph: Theme.icons.repeat
+                    variant: "text"
+                    tooltip: EditorState.loopWorkAreaEnabled
+                             ? qsTr("Loop work area on — tap to turn off")
+                             : qsTr("Loop work area off — tap to turn on")
+                    active: EditorState.loopWorkAreaEnabled
+                    enabled: EditorState.workAreaActive
+                    onClicked: EditorState.toggleLoopWorkArea()
+                }
+
+                IconButton {
+                    anchors.verticalCenter: parent.verticalCenter
+                    buttonSize: Theme.androidIconButtonSize
+                    iconSize: Theme.iconSizeBase
                     glyph: Theme.icons.fastForward
                     variant: "text"
                     visible: transport.showSkips

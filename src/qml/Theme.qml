@@ -459,6 +459,7 @@ QtObject {
         save: "save",
         setStart: "arrow-left-to-line",
         setEnd: "arrow-right-to-line",
+        repeat: "repeat",
         // Timeline trim tools — vertical align marks read as “keep from here”.
         trimStart: "align-start-vertical",
         trimEnd: "align-end-vertical",
