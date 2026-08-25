@@ -465,6 +465,8 @@ add_library(driftengine STATIC
     src/engine/SceneDetect.cpp
     src/engine/ObjectDetector.h
     src/engine/ObjectDetector.cpp
+    src/engine/DebugReport.h
+    src/engine/DebugReport.cpp
     src/engine/FaceTrack.h
     src/engine/FaceTrack.cpp
     src/engine/DeepFilterDenoiser.h
@@ -665,6 +667,7 @@ qt_add_qml_module(drift
         src/qml/components/ThemedProgressBar.qml
         src/qml/components/ThemedLabel.qml
         src/qml/components/ThemedDialog.qml
+        src/qml/components/DebugInfoDialog.qml
         src/qml/components/NameDialog.qml
         src/qml/components/AddonManagerDialog.qml
         src/qml/components/AddonStartupDialog.qml

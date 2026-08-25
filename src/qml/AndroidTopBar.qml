@@ -308,6 +308,11 @@ Item {
                     onTriggered: root.Window.window.openExtras()
                 }
                 MenuRow {
+                    text: qsTr("Debug info")
+                    glyph: Theme.icons.bug
+                    onTriggered: root.Window.window.openDebugInfo()
+                }
+                MenuRow {
                     text: qsTr("Update available")
                     glyph: Theme.icons.download
                     visible: Updates.updateAvailable

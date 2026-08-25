@@ -509,6 +509,7 @@ QtObject {
         // Media
         captions: "captions",
         listVideo: "list-video",
+        bug: "bug",
         smartphone: "smartphone",
         monitor: "monitor",
         square: "square",

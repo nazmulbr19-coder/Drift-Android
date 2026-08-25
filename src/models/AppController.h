@@ -433,6 +433,12 @@ public:
     // Sensitivity, persisted in QSettings so a scan does not forget it between sessions.
     Q_INVOKABLE double sceneThreshold() const;
     Q_INVOKABLE void setSceneThreshold(double threshold);
+
+    // Decoder/encoder capability and host facts for the Debug info dialog and GitHub issues.
+    Q_INVOKABLE QVariantMap debugInfo() const;
+    Q_INVOKABLE QString debugInfoText() const;
+    Q_INVOKABLE void copyDebugInfo();
+
     // shapeKind/shapeId is a catalog id from builtinShapes(), which is not always a ShapeKind name:
     // "circle" and "ellipse" are the same kind with different default aspects.
     Q_INVOKABLE void addShapeClip(const QString &shapeKind, double atSeconds);

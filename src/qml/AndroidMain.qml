@@ -284,6 +284,7 @@ ApplicationWindow {
     AddonStartupDialog { id: addonStartupDialog }
     MissingAddonsDialog { id: missingAddonsDialog }
     UpdateDialog { id: updateDialog }
+    DebugInfoDialog { id: debugInfoDialog }
     SubtitleProgressDialog { id: subtitleProgressDialog }
     ReverseProgressDialog { id: reverseProgressDialog }
 
@@ -328,6 +329,10 @@ ApplicationWindow {
 
     function openUpdateDialog() {
         updateDialog.open()
+    }
+
+    function openDebugInfo() {
+        debugInfoDialog.open()
     }
 
     readonly property alias addonAttentionNeeded: addonStartupDialog.needsAttention

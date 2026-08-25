@@ -34,7 +34,9 @@
 #include "engine/EffectPackageLoader.h"
 #include "engine/EffectProcessor.h"
 #include "engine/FaceTrack.h"
+#include "engine/DebugReport.h"
 #include "engine/ObjectDetector.h"
+#include "engine/OrtRuntime.h"
 #include "engine/SceneDetect.h"
 #include "engine/EmojiCatalog.h"
 #include "engine/FontCatalog.h"
@@ -188,6 +190,7 @@ private slots:
     void sceneLoudnessRanksAcrossTheClip();
     void yoloxDecodeAppliesGridAndStride();
     void objectNmsIsPerClass();
+    void debugReportListsCommonCodecs();
     void denoiseAuxiliaryConstantsRoundTrip();
     void denoisePreservesLengthAndSilence();
     void denoiseRemovesBroadbandNoise();
@@ -5323,6 +5326,83 @@ void EngineTest::objectNmsIsPerClass()
     QCOMPARE(apart.size(), 2);
 
     QVERIFY(drift::nonMaximumSuppression({}, 0.45).isEmpty());
+}
+
+void EngineTest::debugReportListsCommonCodecs()
+{
+    const QVariantMap info = DebugReport::collect();
+    const QVariantList codecs = info.value(QStringLiteral("codecs")).toList();
+    QCOMPARE(codecs.size(), 5);
+
+    QStringList names;
+    for (const QVariant &entry : codecs) {
+        const QVariantMap row = entry.toMap();
+        names.append(row.value(QStringLiteral("name")).toString());
+        QVERIFY(row.contains(QStringLiteral("software")));
+        QVERIFY(row.contains(QStringLiteral("hardware")));
+        QVERIFY(row.contains(QStringLiteral("softwareDecoder")));
+        QVERIFY(row.contains(QStringLiteral("hardwareDecoder")));
+    }
+    QCOMPARE(names, (QStringList{
+                         QStringLiteral("H264"),
+                         QStringLiteral("VP9"),
+                         QStringLiteral("VP8"),
+                         QStringLiteral("AV1"),
+                         QStringLiteral("HEVC"),
+                     }));
+
+    QVERIFY(!info.value(QStringLiteral("system")).toList().isEmpty());
+    QVERIFY(!info.value(QStringLiteral("package")).toString().isEmpty());
+    QVERIFY(info.contains(QStringLiteral("hardwareDecodeAvailable")));
+
+    const QVariantList encoders = info.value(QStringLiteral("encoders")).toList();
+    QCOMPARE(encoders.size(), 5);
+    for (const QVariant &entry : encoders) {
+        const QVariantMap row = entry.toMap();
+        QVERIFY(!row.value(QStringLiteral("hardwareUnavailable")).toBool());
+        QVERIFY(row.contains(QStringLiteral("hardware")));
+        QVERIFY(row.contains(QStringLiteral("software")));
+        QVERIFY(row.contains(QStringLiteral("softwareEncoder")));
+        QVERIFY(row.contains(QStringLiteral("hardwareEncoder")));
+        if (row.value(QStringLiteral("hardware")).toBool())
+            QVERIFY(!row.value(QStringLiteral("hardwareEncoder")).toString().isEmpty());
+        else
+            QVERIFY(row.value(QStringLiteral("hardwareEncoder")).toString().isEmpty());
+    }
+
+    bool sawGpu = false;
+    const QVariantList system = info.value(QStringLiteral("system")).toList();
+    for (const QVariant &entry : system) {
+        const QString label = entry.toMap().value(QStringLiteral("label")).toString();
+        if (label.startsWith(QLatin1String("GPU")))
+            sawGpu = true;
+    }
+    QVERIFY(sawGpu);
+
+    QVERIFY(info.contains(QStringLiteral("hints")));
+    const QVariantList hints = info.value(QStringLiteral("hints")).toList();
+    QStringList hintIds;
+    for (const QVariant &entry : hints) {
+        const QVariantMap row = entry.toMap();
+        QVERIFY(row.contains(QStringLiteral("id")));
+        QVERIFY(row.contains(QStringLiteral("title")));
+        QVERIFY(row.contains(QStringLiteral("detail")));
+        hintIds.append(row.value(QStringLiteral("id")).toString());
+    }
+    if (info.value(QStringLiteral("package")).toString() != QLatin1String("Flatpak")) {
+        QVERIFY(!hintIds.contains(QStringLiteral("codecs-extra")));
+        QVERIFY(!hintIds.contains(QStringLiteral("vaapi-nvidia")));
+    }
+    if (drift::ort::available())
+        QVERIFY(!hintIds.contains(QStringLiteral("onnxruntime")));
+    else
+        QVERIFY(hintIds.contains(QStringLiteral("onnxruntime")));
+
+    const QString text = DebugReport::formatPlainText(info);
+    QVERIFY(text.contains(QStringLiteral("H264")));
+    QVERIFY(text.contains(QStringLiteral("CutWire Drift debug report")));
+    QVERIFY(text.contains(QStringLiteral("Video encoders")));
+    QVERIFY(text.contains(QStringLiteral("Supported")));
 }
 
 QTEST_MAIN(EngineTest)

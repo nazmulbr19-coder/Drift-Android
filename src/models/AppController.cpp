@@ -36,6 +36,7 @@
 #include "engine/MediaWaveform.h"
 #include "engine/FaceLandmarker.h"
 #include "engine/FaceTrack.h"
+#include "engine/DebugReport.h"
 #include "engine/ObjectDetector.h"
 #include "engine/SceneDetect.h"
 #include "engine/ReverseProxyCache.h"
@@ -4878,6 +4879,25 @@ double AppController::sceneThreshold() const
 void AppController::setSceneThreshold(double threshold)
 {
     QSettings().setValue(QStringLiteral("scenes/threshold"), qBound(4.0, threshold, 100.0));
+}
+
+QVariantMap AppController::debugInfo() const
+{
+    return DebugReport::collect();
+}
+
+QString AppController::debugInfoText() const
+{
+    return DebugReport::formatPlainText(debugInfo());
+}
+
+void AppController::copyDebugInfo()
+{
+    const QString text = debugInfoText();
+    if (text.isEmpty())
+        return;
+    if (QClipboard *clip = QGuiApplication::clipboard())
+        clip->setText(text);
 }
 
 void AppController::cancelSceneDetection()
