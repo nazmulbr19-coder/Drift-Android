@@ -461,6 +461,10 @@ add_library(driftengine STATIC
     src/engine/Sam2Segmenter.cpp
     src/engine/FaceLandmarker.h
     src/engine/FaceLandmarker.cpp
+    src/engine/SceneDetect.h
+    src/engine/SceneDetect.cpp
+    src/engine/ObjectDetector.h
+    src/engine/ObjectDetector.cpp
     src/engine/FaceTrack.h
     src/engine/FaceTrack.cpp
     src/engine/DeepFilterDenoiser.h
@@ -616,6 +620,7 @@ qt_add_qml_module(drift
         src/qml/components/assets/TextAssetsTab.qml
         src/qml/components/assets/SubtitlesTab.qml
         src/qml/components/assets/StickersTab.qml
+        src/qml/components/assets/ScenesTab.qml
         src/qml/components/assets/ShapesTab.qml
         src/qml/components/assets/SoundsTab.qml
         src/qml/components/assets/SettingsTab.qml

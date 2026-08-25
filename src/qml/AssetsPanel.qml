@@ -250,7 +250,7 @@ PanelFrame {
         if (tabId === "text" || tabId === "subtitles" || tabId === "stickers" || tabId === "shapes"
                 || tabId === "effects" || tabId === "templates" || tabId === "adjustment"
                 || tabId === "settings" || tabId === "sounds" || tabId === "transitions"
-                || tabId === "shortcuts")
+                || tabId === "shortcuts" || tabId === "scenes")
             return false
         const kinds = kindsForTab(tabId)
         return kinds.length === 0 || kinds.indexOf(kind) >= 0
@@ -266,6 +266,7 @@ PanelFrame {
         ListElement { tabId: "subtitles"; icon: 2; label: "Subtitles"; separatorAfter: false }
         ListElement { tabId: "stickers"; icon: 3; label: "Stickers"; separatorAfter: false }
         ListElement { tabId: "shapes"; icon: 4; label: "Shapes"; separatorAfter: true }
+        ListElement { tabId: "scenes"; icon: 11; label: "Scenes"; separatorAfter: true }
         ListElement { tabId: "effects"; icon: 5; label: "Effects"; separatorAfter: false }
         ListElement { tabId: "templates"; icon: 6; label: "Templates"; separatorAfter: false }
         ListElement { tabId: "transitions"; icon: 7; label: "Transitions"; separatorAfter: false }
@@ -284,7 +285,8 @@ PanelFrame {
         Theme.icons.chevronsRight,
         Theme.icons.audioLines,
         Theme.icons.settings,
-        Theme.icons.keyboard
+        Theme.icons.keyboard,
+        Theme.icons.listVideo
     ]
     property int activeTab: 0
     property bool sortByKind: false
@@ -598,6 +600,13 @@ PanelFrame {
                 opacity: root.tabOpacity
                 height: parent.height - Theme.panelHeaderHeight
                 onAdded: root.addCompleted()
+            }
+
+            ScenesTab {
+                visible: tabsModel.get(activeTab).tabId === "scenes"
+                width: parent.width
+                opacity: root.tabOpacity
+                height: parent.height - Theme.panelHeaderHeight
             }
 
             SettingsTab {

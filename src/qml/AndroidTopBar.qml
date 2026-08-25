@@ -288,6 +288,11 @@ Item {
                     onTriggered: root.assetsTabRequested("templates")
                 }
                 MenuRow {
+                    text: qsTr("Scenes")
+                    glyph: Theme.icons.listVideo
+                    onTriggered: root.assetsTabRequested("scenes")
+                }
+                MenuRow {
                     text: qsTr("Settings")
                     glyph: Theme.icons.settings
                     onTriggered: root.assetsTabRequested("settings")

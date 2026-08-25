@@ -36,6 +36,8 @@
 #include "engine/MediaWaveform.h"
 #include "engine/FaceLandmarker.h"
 #include "engine/FaceTrack.h"
+#include "engine/ObjectDetector.h"
+#include "engine/SceneDetect.h"
 #include "engine/ReverseProxyCache.h"
 #include "engine/ReverseRenderer.h"
 #include "engine/Sam2Segmenter.h"
@@ -4789,6 +4791,236 @@ void AppController::cancelFaceDetection()
 {
     if (m_faceDetecting)
         m_faceDetectCancel.storeRelaxed(1);
+}
+
+// --- scene detection --------------------------------------------------------
+
+double AppController::sceneThreshold() const
+{
+    return QSettings()
+        .value(QStringLiteral("scenes/threshold"), drift::SceneDetectOptions{}.threshold)
+        .toDouble();
+}
+
+void AppController::setSceneThreshold(double threshold)
+{
+    QSettings().setValue(QStringLiteral("scenes/threshold"), qBound(4.0, threshold, 100.0));
+}
+
+void AppController::cancelSceneDetection()
+{
+    m_sceneDetectCancel.storeRelaxed(1);
+}
+
+bool AppController::objectDetectionAvailable() const
+{
+    return drift::ObjectDetector::modelPresent();
+}
+
+void AppController::clearScenes()
+{
+    if (m_scenes.isEmpty() && m_sceneClipId.isEmpty())
+        return;
+    m_scenes.clear();
+    m_sceneClipId.clear();
+    m_sceneClipPath.clear();
+    emit scenesChanged();
+}
+
+void AppController::seekToScene(int sceneIndex)
+{
+    if (sceneIndex < 0 || sceneIndex >= m_scenes.size())
+        return;
+
+    // Resolved by id, not index: the analysis outlives any number of timeline edits.
+    for (const drift::Track &track : m_project.tracks()) {
+        for (const drift::Clip &clip : track.clips) {
+            if (clip.id != m_sceneClipId)
+                continue;
+
+            const QVariantMap scene = m_scenes.at(sceneIndex).toMap();
+            const drift::TimeUs sourceUs =
+                drift::secondsToUs(scene.value(QStringLiteral("sourceStart")).toDouble());
+            // Scenes are in source time. Speed and reverse mean the clip's own mapping is the
+            // only thing that knows where that lands on the timeline.
+            const drift::TimeUs span = clip.sourceSpanUs();
+            if (span <= 0)
+                return;
+            const double through = double(sourceUs - clip.srcIn) / double(span);
+            const drift::TimeUs at =
+                clip.timelineStart
+                + drift::TimeUs(qBound(0.0, through, 1.0) * double(clip.timelineDuration));
+            setPlayheadUs(clip.reverse ? clip.timelineStart + clip.timelineDuration
+                                             - (at - clip.timelineStart)
+                                       : at);
+            return;
+        }
+    }
+}
+
+void AppController::applySceneAnalysis(const drift::SceneAnalysis &analysis, const QString &clipId,
+                                      const QString &clipPath)
+{
+    QVariantList rows;
+    rows.reserve(analysis.scenes.size());
+    for (int i = 0; i < analysis.scenes.size(); ++i) {
+        const drift::Scene &scene = analysis.scenes.at(i);
+        rows.append(QVariantMap{
+            {QStringLiteral("index"), i},
+            {QStringLiteral("sourceStart"), drift::usToSeconds(scene.sourceIn)},
+            {QStringLiteral("sourceEnd"), drift::usToSeconds(scene.sourceOut)},
+            {QStringLiteral("duration"), drift::usToSeconds(scene.duration())},
+            {QStringLiteral("thumbnailSeconds"), drift::usToSeconds(scene.thumbnailUs)},
+            {QStringLiteral("motion"), scene.motion},
+            {QStringLiteral("loudness"), scene.loudness},
+            {QStringLiteral("objects"), scene.objects},
+            {QStringLiteral("score"), scene.score},
+            {QStringLiteral("labels"), scene.labels},
+        });
+    }
+
+    m_scenes = rows;
+    m_sceneClipId = clipId;
+    m_sceneClipPath = clipPath;
+    emit scenesChanged();
+}
+
+drift::SceneDetectRequest AppController::sceneRequestFor(const drift::Clip &clip,
+                                                         bool withObjects,
+                                                         double minSceneSeconds) const
+{
+    drift::SceneDetectRequest request;
+    request.path = clip.path;
+    request.sourceIn = clip.srcIn;
+    request.sourceOut = clip.srcOut;
+    request.options.threshold = sceneThreshold();
+    request.options.detectObjects = withObjects && objectDetectionAvailable();
+    if (minSceneSeconds > 0.0)
+        request.options.minSceneSeconds = minSceneSeconds;
+    return request;
+}
+
+void AppController::detectScenesForClip(int trackIndex, int clipIndex, bool withObjects,
+                                        double minSceneSeconds)
+{
+    if (m_sceneDetecting) {
+        setLastMessage(tr("Already looking for scenes"), QStringLiteral("warning"));
+        return;
+    }
+    if (trackIndex < 0 || trackIndex >= m_project.tracks().size())
+        return;
+    const drift::Track &track = m_project.tracks().at(trackIndex);
+    if (clipIndex < 0 || clipIndex >= track.clips.size())
+        return;
+
+    const drift::Clip clip = track.clips.at(clipIndex);
+    if (clip.type != drift::ClipType::Video) {
+        setLastMessage(tr("Select a video clip to find scenes in"), QStringLiteral("warning"));
+        return;
+    }
+    if (clip.path.isEmpty() || clip.srcOut <= clip.srcIn) {
+        setLastMessage(tr("Clip has no video to scan"), QStringLiteral("warning"));
+        return;
+    }
+
+    const drift::SceneDetectRequest request =
+        sceneRequestFor(clip, withObjects, minSceneSeconds);
+
+    // A cached analysis is the common case once a clip has been scanned, and it costs a file
+    // read rather than a decode pass — so it is worth checking before disturbing playback.
+    drift::SceneAnalysis cached;
+    if (drift::loadCachedAnalysis(request, &cached)
+        && (!withObjects || cached.objectsScanned)) {
+        applySceneAnalysis(cached, clip.id, clip.path);
+        setLastMessage(tr("Found %n scene(s)", nullptr, int(cached.scenes.size())));
+        emit sceneDetectionFinished(true, QString());
+        return;
+    }
+
+    // Same reason as the export, segmentation and face jobs: playback would drive the decode
+    // pool from a second thread while this job walks it frame by frame.
+    setPlaying(false);
+
+    m_sceneDetectCancel.storeRelaxed(0);
+    m_sceneDetectProgress = 0.0;
+    emit sceneDetectProgressChanged();
+    m_sceneDetectStatus = tr("Getting ready…");
+    emit sceneDetectStatusChanged();
+    m_sceneDetecting = true;
+    emit sceneDetectingChanged();
+    setLastMessage(tr("Looking for scenes…"));
+
+    // Resolved by id at the end rather than by index: the timeline can be edited while the
+    // job runs, and a stale index would attach the analysis to the wrong clip.
+    const QString clipId = clip.id;
+    const QString clipPath = clip.path;
+    const quint64 generation = ++m_sceneGeneration;
+
+    (void)QtConcurrent::run([this, request, clipId, clipPath, generation]() {
+        Exporter::BackgroundHold hold(QStringLiteral("Looking for scenes"));
+        auto setProgress = [this, generation](double fraction, const QString &status) {
+            Exporter::BackgroundHold::setPercent(static_cast<int>(fraction * 100.0));
+            QMetaObject::invokeMethod(
+                this,
+                [this, fraction, status, generation]() {
+                    if (generation != m_sceneGeneration)
+                        return;
+                    m_sceneDetectProgress = fraction;
+                    emit sceneDetectProgressChanged();
+                    if (!status.isEmpty() && status != m_sceneDetectStatus) {
+                        m_sceneDetectStatus = status;
+                        emit sceneDetectStatusChanged();
+                    }
+                },
+                Qt::QueuedConnection);
+        };
+
+        auto finish = [this, clipId, clipPath, generation](bool ok, const QString &message,
+                                                          const drift::SceneAnalysis &analysis) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, ok, message, analysis, clipId, clipPath, generation]() {
+                    if (generation != m_sceneGeneration)
+                        return; // superseded by a newer scan; this result is for nobody
+                    m_sceneDetecting = false;
+                    emit sceneDetectingChanged();
+                    m_sceneDetectProgress = ok ? 1.0 : 0.0;
+                    emit sceneDetectProgressChanged();
+                    m_sceneDetectStatus = ok ? tr("Done") : message;
+                    emit sceneDetectStatusChanged();
+                    if (!ok) {
+                        if (!message.isEmpty())
+                            setLastMessage(message, QStringLiteral("error"));
+                        emit sceneDetectionFinished(false, message);
+                        return;
+                    }
+                    applySceneAnalysis(analysis, clipId, clipPath);
+                    setLastMessage(tr("Found %n scene(s)", nullptr, int(analysis.scenes.size())));
+                    emit sceneDetectionFinished(true, QString());
+                },
+                Qt::QueuedConnection);
+        };
+
+        QString error;
+        const drift::SceneAnalysis analysis = drift::detectScenes(
+            request,
+            [&](double fraction, const QString &status) {
+                if (m_sceneDetectCancel.loadRelaxed() != 0)
+                    return false;
+                setProgress(fraction, status);
+                return true;
+            },
+            &error);
+
+        if (analysis.isEmpty()) {
+            const bool cancelled = m_sceneDetectCancel.loadRelaxed() != 0;
+            finish(false, cancelled ? tr("Scene detection cancelled") : error, {});
+            return;
+        }
+
+        drift::storeCachedAnalysis(request, analysis);
+        finish(true, QString(), analysis);
+    });
 }
 
 void AppController::clearFaceTrack(int trackIndex, int clipIndex)
@@ -11492,6 +11724,7 @@ void AppController::newProject()
     m_playback.setProject(&m_project);
     m_undoStack.clear();
     clearSelection();
+    clearScenes();
     setPlayheadUs(0);
     setCurrentProjectPath(QString());
     setMediaGridMode(true);
