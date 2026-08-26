@@ -1,3 +1,6 @@
+> [!NOTE]
+> This repo is now archived and will no longer receive updates, The android version will be merged with the main [Drift](https://github.com/CutWire-Studios/Drift/) repository. New Android releases will be released along with drift desktop releases.
+
 <p align="center">
   <img src="Drift_icon.png" alt="Drift icon" width="128" height="128">
 </p>
