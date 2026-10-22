@@ -188,6 +188,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Resolve SDK paths
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+      - name: Install Android build-tools
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" --install "build-tools;36.0.0"
+
       - uses: actions/download-artifact@v4
         with:
           name: unsigned-${{ matrix.abi }}
@@ -205,7 +216,7 @@ jobs:
           set -euo pipefail
           BT="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)"
           KS="$RUNNER_TEMP/release.jks"
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$KS"
+          printf '%s' "$KEYSTORE_B64" \vert{} base64 -d > "$KS"
 
           OUT="$RUNNER_TEMP/drift-$ABI-release.apk"
           "$BT/zipalign" -p -f 4 "unsigned/drift-$ABI-unsigned.apk" "$RUNNER_TEMP/aligned.apk"
@@ -225,3 +236,4 @@ jobs:
           path: ${{ runner.temp }}/drift-${{ matrix.abi }}-release.apk
           retention-days: 30
           if-no-files-found: error
+          
