@@ -1,7 +1,9 @@
-name: Android
+name: Build Android APK
 
 on:
   push:
+    branches:
+      - main
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -10,57 +12,43 @@ on:
       - '.gitignore'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-apk-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  QT_VERSION: 6.11.1
-  # The version every module manifest in the Qt kit names — see scripts/build.sh.
-  NDK_VERSION: 27.2.12479018
+  QT_VERSION: '6.11.1'
+  NDK_VERSION: '27.2.12479018'
+  ABI: arm64-v8a
+  QT_ARCH: android_arm64_v8a
 
 jobs:
   build:
+    name: Build and sign ARM64 APK
     runs-on: ubuntu-24.04
     timeout-minutes: 240
-    strategy:
-      # Every ABI reports its own result: one failing arch should not hide whether the
-      # other two compile.
-      fail-fast: false
-      matrix:
-        include:
-          - abi: arm64-v8a
-            qt_arch: android_arm64_v8a
-          # Qt names the 32-bit ARM kit after the architecture, not after the Android ABI.
-          - abi: armeabi-v7a
-            qt_arch: android_armv7
-          - abi: x86_64
-            qt_arch: android_x86_64
-
-    env:
-      ABI: ${{ matrix.abi }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-      # The Qt kit, the NDK, a JUCE clone, the FFmpeg/OpenSSL source trees and an
-      # unstripped ~280 MB libdrift.so do not fit alongside the image's preinstalled
-      # toolchains on a 14 GB runner.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/node_modules \
                       /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
-          sudo rm -rf "$ANDROID_SDK_ROOT"/ndk
+          sudo rm -rf "${ANDROID_SDK_ROOT:-$ANDROID_HOME}/ndk"
           df -h /
 
-      - uses: actions/setup-java@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # The `env` context does not carry the runner image's own variables, so the SDK
-      # and NDK paths are published into it once here for every step below.
-      - name: Resolve SDK and NDK paths
+      - name: Resolve Android SDK and NDK paths
         run: |
           SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
@@ -73,67 +61,58 @@ jobs:
             ninja-build nasm pkg-config ccache \
             libgl1 libegl1 libxkbcommon0 libfontconfig1
 
-      - name: Install Android NDK ${{ env.NDK_VERSION }} and SDK platform 36
+      - name: Install Android NDK, platform and build tools
         run: |
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" --install "ndk;$NDK_VERSION" "platforms;android-36" "build-tools;36.0.0"
+          "$SDKMANAGER" --install \
+            "ndk;$NDK_VERSION" \
+            'platforms;android-36' \
+            'build-tools;36.0.0'
 
-      # aqt rather than an action: since Qt 6.8 the Android kits are published under the
-      # `all_os` host, which the wrapper actions address inconsistently.
-      - name: Install Qt ${{ env.QT_VERSION }} (host + Android)
+      - name: Install Qt host tools and Android kit
         run: |
           pipx install aqtinstall
           export PATH="$HOME/.local/bin:$PATH"
           aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 \
             -m qtmultimedia qtshadertools -O "$HOME/Qt"
-          aqt install-qt all_os android "$QT_VERSION" "${{ matrix.qt_arch }}" \
+          aqt install-qt all_os android "$QT_VERSION" "$QT_ARCH" \
             -m qtmultimedia qtshadertools -O "$HOME/Qt"
-          # Qt builds each Android kit on whichever host it happens to use — the ARMv7 one comes
-          # from a Windows machine, and that 7z carries no POSIX permission bits, so every script
-          # in the kit extracts non-executable and scripts/build.sh finds no runnable qt-cmake.
-          # (The arm64 kit is built on macOS and keeps its +x, which is why only ARMv7 failed.)
-          KIT="$HOME/Qt/$QT_VERSION/${{ matrix.qt_arch }}"
-          find "$KIT/bin" "$KIT/libexec" -maxdepth 1 -type f ! -name '*.bat' -exec chmod +x {} +
+          KIT="$HOME/Qt/$QT_VERSION/$QT_ARCH"
+          find "$KIT/bin" "$KIT/libexec" -maxdepth 1 -type f \
+            ! -name '*.bat' -exec chmod +x {} +
 
-      # FFmpeg, x264, zstd, OpenSSL and SoundTouch cross-built for Android: ~45 min,
-      # and they only change when the script that pins their tags does.
-      - name: Restore prebuilt native dependencies
+      - name: Restore Android native dependency cache
         id: deps-cache
         uses: actions/cache/restore@v4
         with:
           path: third_party/prebuilt
-          key: android-deps-${{ matrix.abi }}-${{ env.NDK_VERSION }}-${{ hashFiles('third_party/build-android.sh') }}
+          key: android-deps-${{ env.ABI }}-${{ env.NDK_VERSION }}-${{ hashFiles('third_party/build-android.sh') }}
 
-      - name: Build native dependencies
+      - name: Build Android native dependencies
         if: steps.deps-cache.outputs.cache-hit != 'true'
         run: ./third_party/build-android.sh "$ABI"
 
-      # Saved before the app build so a compile failure does not throw away 45 minutes
-      # of dependency work.
-      - name: Save prebuilt native dependencies
+      - name: Save Android native dependency cache
         if: steps.deps-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: third_party/prebuilt
           key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
-      - name: Drop native dependency sources
+      - name: Remove downloaded dependency source trees
         if: steps.deps-cache.outputs.cache-hit != 'true'
         run: rm -rf third_party/src
 
-      - name: Restore ccache
+      - name: Restore C/C++ compiler cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ matrix.abi }}-${{ github.sha }}
-          restore-keys: ccache-${{ matrix.abi }}-
+          key: ccache-${{ env.ABI }}-${{ github.sha }}
+          restore-keys: ccache-${{ env.ABI }}-
 
       - name: Build release APK
         env:
-          # A separate application id so a CI APK installs beside a release install instead of
-          # being refused over its signature, and a version code that grows with every run so
-          # one CI build can replace another.
           DRIFT_ANDROID_PACKAGE_NAME: org.cutwire.drift.ci
           DRIFT_ANDROID_APP_NAME: Drift CI
           DRIFT_ANDROID_VERSION_CODE: ${{ github.run_number }}
@@ -141,99 +120,104 @@ jobs:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
           CCACHE_MAXSIZE: 2G
         run: |
-          export QT_ANDROID_ROOT="$HOME/Qt/$QT_VERSION/${{ matrix.qt_arch }}"
+          export QT_ANDROID_ROOT="$HOME/Qt/$QT_VERSION/$QT_ARCH"
           export QT_HOST_PATH="$HOME/Qt/$QT_VERSION/gcc_64"
           ./scripts/build.sh "$ABI" Release
           ccache -s
 
-      - name: Save ccache
+      - name: Save C/C++ compiler cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ matrix.abi }}-${{ github.sha }}
+          key: ccache-${{ env.ABI }}-${{ github.sha }}
 
       - name: Collect unsigned APK
         run: |
           set -euo pipefail
           BUILD="build/android-$ABI"
-          # Prefer gradle's own output directory over the unaligned copies under intermediates/.
-          APK="$(find "$BUILD/android-build/build/outputs/apk/release" -name '*.apk' -print -quit 2>/dev/null || true)"
-          [ -n "$APK" ] || APK="$(find "$BUILD/android-build" -name '*release*.apk' -print -quit)"
-          [ -n "$APK" ] || { echo "no release APK under $BUILD/android-build" >&2; exit 1; }
+          APK="$(find "$BUILD/android-build/build/outputs/apk/release" \
+            -type f -name '*.apk' -print -quit 2>/dev/null || true)"
+          if [ -z "$APK" ]; then
+            APK="$(find "$BUILD/android-build" -type f -name '*release*.apk' -print -quit)"
+          fi
+          if [ -z "$APK" ]; then
+            echo 'ERROR: Could not find the generated release APK.' >&2
+            find "$BUILD" -type f -name '*.apk' -print || true
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/out"
-          cp "$APK" "$RUNNER_TEMP/out/drift-$ABI-unsigned.apk"
+          cp "$APK" "$RUNNER_TEMP/out/drift-arm64-v8a-unsigned.apk"
+          echo "Found APK: $APK"
 
-      # Handed to the release job rather than signed here: the signed APKs must not appear
-      # unless every ABI built, and the keystore is then touched in exactly one place.
-      - uses: actions/upload-artifact@v4
+      - name: Restore persistent debug signing key
+        id: debug-key-cache
+        uses: actions/cache/restore@v4
         with:
-          name: unsigned-${{ matrix.abi }}
-          path: ${{ runner.temp }}/out/drift-${{ matrix.abi }}-unsigned.apk
-          retention-days: 1
-          if-no-files-found: error
+          path: ~/.android/debug.keystore
+          key: drift-android-debug-signing-key-v1
 
-  # `needs: build` waits on the whole matrix, so nothing here runs unless all three ABIs
-  # compiled and packaged.
-  release:
-    needs: build
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        abi: [arm64-v8a, armeabi-v7a, x86_64]
-
-    steps:
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Resolve SDK paths
+      - name: Create debug signing key if needed
         run: |
-          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname 'CN=Android Debug,O=Android,C=US'
+          fi
 
-      - name: Install Android build-tools
-        run: |
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null
-          "$SDKMANAGER" --install "build-tools;36.0.0"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: unsigned-${{ matrix.abi }}
-          path: unsigned
-
-      # androiddeployqt hands back an unsigned release APK; it will not install until it
-      # carries a signature.
-      - name: Sign release APK
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ABI: ${{ matrix.abi }}
+      - name: Zipalign and sign installable APK
         run: |
           set -euo pipefail
-          BT="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)"
-          KS="$RUNNER_TEMP/release.jks"
-          printf '%s' "$KEYSTORE_B64" \vert{} base64 -d > "$KS"
-
-          OUT="$RUNNER_TEMP/drift-$ABI-release.apk"
-          "$BT/zipalign" -p -f 4 "unsigned/drift-$ABI-unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          UNSIGNED="$RUNNER_TEMP/out/drift-arm64-v8a-unsigned.apk"
+          ALIGNED="$RUNNER_TEMP/out/drift-arm64-v8a-aligned.apk"
+          SIGNED="$RUNNER_TEMP/drift-arm64-v8a.apk"
+          "$BT/zipalign" -p -f 4 "$UNSIGNED" "$ALIGNED"
           "$BT/apksigner" sign \
-            --ks "$KS" --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
-            --ks-key-alias "$KEY_ALIAS" \
-            --out "$OUT" "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" verify --print-certs "$OUT"
+            --ks "$HOME/.android/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --out "$SIGNED" "$ALIGNED"
+          "$BT/apksigner" verify --verbose "$SIGNED"
+          echo "Signed APK ready: $SIGNED"
 
-      - name: Shred keystore
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
-
-      - uses: actions/upload-artifact@v4
+      - name: Save persistent debug signing key
+        if: steps.debug-key-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
         with:
-          name: drift-${{ matrix.abi }}-release-${{ github.sha }}
-          path: ${{ runner.temp }}/drift-${{ matrix.abi }}-release.apk
-          retention-days: 30
+          path: ~/.android/debug.keystore
+          key: drift-android-debug-signing-key-v1
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-arm64-v8a-apk
+          path: ${{ runner.temp }}/drift-arm64-v8a.apk
           if-no-files-found: error
-          
+          retention-days: 14
+
+      - name: Publish direct APK download on the rolling prerelease
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Keep one current CI release so the APK download link stays stable.
+          if gh release view ci-latest >/dev/null 2>&1; then
+            gh release delete ci-latest --yes --cleanup-tag
+          else
+            git push origin --delete ci-latest 2>/dev/null || true
+          fi
+          gh release create ci-latest \
+            "$RUNNER_TEMP/drift-arm64-v8a.apk" \
+            --target "$GITHUB_SHA" \
+            --title 'Latest Installable Android APK' \
+            --notes "Automatically built from commit ${GITHUB_SHA::7}. This is a debug-signed testing build for arm64-v8a, not an official stable release." \
+            --prerelease
+            
